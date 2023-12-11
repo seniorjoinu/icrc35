@@ -9,6 +9,7 @@ import {
   IHandshakeCompleteMsg,
   IHandshakeInitMsg,
   IICRC35Connection,
+  IListener,
   IPeer,
   IPingMsg,
   IPongMsg,
@@ -26,18 +27,31 @@ import {
   ZPingMsg,
   ZPongMsg,
 } from "./types";
-import { ErrorCode, ICRC35Error, generateDefaultFilter, generateSecret, isEqualUint8Arr, delay } from "./utils";
-import { ICRC35_CONNECTION_TIMEOUT_MS, ICRC35_PING_TIMEOUT_MS } from "./consts";
+import {
+  ErrorCode,
+  ICRC35Error,
+  generateDefaultFilter,
+  generateSecret,
+  isEqualUint8Arr,
+  delay,
+  defaultListener,
+  log,
+} from "./utils";
+import { DEFAULT_DEBUG, ICRC35_CONNECTION_TIMEOUT_MS, ICRC35_PING_TIMEOUT_MS } from "./consts";
 
-export class ICRC35Connection<W extends IPeer> implements IICRC35Connection {
-  private _peer: IPeer | null = null;
+export class ICRC35Connection<P extends IPeer, L extends IListener> implements IICRC35Connection {
+  private _peer: P | null = null;
   private _peerOrigin: TOrigin | null = null;
+  private _listener: L;
   private mode: IEndpointChildMode | IEndpointParentMode;
   private lastReceivedMsgTimestamp: number = 0;
   private handler: HandlerFn | null = null;
   private closeHandler: CloseHandlerFn | null = null;
+  private debug: boolean;
 
-  static async establish<W extends IPeer>(config: ICRC35ConnectionConfig<W>): Promise<ICRC35Connection<W>> {
+  static async establish<P extends IPeer, L extends IListener>(
+    config: ICRC35ConnectionConfig<P, L>
+  ): Promise<ICRC35Connection<P, L>> {
     const it = new ICRC35Connection(config);
 
     await new Promise<void>((resolve, reject) => {
@@ -48,8 +62,8 @@ export class ICRC35Connection<W extends IPeer> implements IICRC35Connection {
       }
     });
 
-    window.addEventListener("message", it.listen);
-    it.pingpong();
+    it.listener.addEventListener("message", it.listen);
+    it.initPingPong();
 
     return it;
   }
@@ -64,6 +78,10 @@ export class ICRC35Connection<W extends IPeer> implements IICRC35Connection {
     };
 
     this._peer!.postMessage(_msg, this._peerOrigin!, transfer);
+
+    if (this.debug) {
+      log(this.listener.origin, "sent message", msg, "to", this._peerOrigin);
+    }
   }
 
   onMessage(handler: HandlerFn) {
@@ -79,6 +97,10 @@ export class ICRC35Connection<W extends IPeer> implements IICRC35Connection {
     };
     this.peer.postMessage(msg, this.peerOrigin!);
 
+    if (this.debug) {
+      log(this.listener.origin, "sent message", msg, "from", this.peerOrigin);
+    }
+
     this.handleConnectionClosed(null);
   }
 
@@ -86,7 +108,7 @@ export class ICRC35Connection<W extends IPeer> implements IICRC35Connection {
     this.closeHandler = handler;
   }
 
-  isActive(): this is { peer: W; peerOrigin: string } {
+  isActive(): this is { peer: P; peerOrigin: string } {
     return this._peer !== null && this._peerOrigin !== null;
   }
 
@@ -98,7 +120,15 @@ export class ICRC35Connection<W extends IPeer> implements IICRC35Connection {
     return this._peerOrigin;
   }
 
-  private listen(ev: MessageEvent<any>) {
+  get listener() {
+    return this._listener;
+  }
+
+  private listen = (ev: MessageEvent<any>) => {
+    if (this.debug) {
+      log(this.listener.origin, "received message", ev.data, "from", ev.origin);
+    }
+
     // pass if the connection is already closed
     if (!this.isActive()) return;
 
@@ -144,21 +174,23 @@ export class ICRC35Connection<W extends IPeer> implements IICRC35Connection {
       default:
         return;
     }
-  }
+  };
 
   // this function will check the last interaction time
   // if this time was more than the <ping timeout> seconds ago, it will send a ping message, to which the other side should respond with pong
   // if there is no response for <connection timeout> seconds, the connection will be closed as stale
-  private async pingpong() {
-    while (this.isActive()) {
-      await delay(ICRC35_PING_TIMEOUT_MS);
-
-      if (!this.isActive()) return;
+  private async initPingPong() {
+    const int = setInterval(() => {
+      if (!this.isActive()) {
+        clearInterval(int);
+        return;
+      }
 
       const delta = Date.now() - this.lastReceivedMsgTimestamp;
 
       if (delta >= ICRC35_CONNECTION_TIMEOUT_MS) {
         this.handleConnectionClosed("timeout");
+        clearInterval(int);
         return;
       }
 
@@ -170,14 +202,18 @@ export class ICRC35Connection<W extends IPeer> implements IICRC35Connection {
 
         this._peer!.postMessage(msg, this.peerOrigin!);
 
-        continue;
+        if (this.debug) {
+          log(this.listener.origin, "sent message", msg, "to", this.peerOrigin);
+        }
+
+        return;
       }
-    }
+    }, ICRC35_PING_TIMEOUT_MS);
   }
 
   private handleConnectionClosed(reason: "close" | "timeout" | null) {
     this._peer = null;
-    window.removeEventListener("message", this.listen);
+    this.listener.removeEventListener("message", this.listen);
 
     if (reason !== null && this.closeHandler !== null) {
       this.closeHandler(reason);
@@ -193,6 +229,10 @@ export class ICRC35Connection<W extends IPeer> implements IICRC35Connection {
     };
 
     this._peer!.postMessage(msg, this.peerOrigin!);
+
+    if (this.debug) {
+      log(this.listener.origin, "sent message", msg, "from", this.peerOrigin);
+    }
   }
 
   private handlePong() {
@@ -211,11 +251,18 @@ export class ICRC35Connection<W extends IPeer> implements IICRC35Connection {
     this.lastReceivedMsgTimestamp = Date.now();
   }
 
-  private constructor(config: ICRC35ConnectionConfig<W>) {
+  private constructor(config: ICRC35ConnectionConfig<P, L>) {
     // @ts-expect-error - all we need here is to be able to call .postMessage() on the peer, we don't care about it's inner structure or subtypes
     config = ZICRC35ConnectionConfig.parse(config);
 
     this._peer = config.peer;
+    if (!config.listener) {
+      this._listener = defaultListener() as L;
+    } else {
+      this._listener = config.listener;
+    }
+
+    this.debug = config.debug || DEFAULT_DEBUG;
 
     if (config.mode === "parent") {
       this.mode = ZEndpointParentMode.parse(config);
@@ -229,8 +276,12 @@ export class ICRC35Connection<W extends IPeer> implements IICRC35Connection {
     const secret = generateSecret();
 
     const handler = (ev: MessageEvent<any>) => {
+      if (this.debug) {
+        log(this.listener.origin, "received message", ev.data, "from", ev.origin);
+      }
+
       // pass other events originated from this page
-      if (ev.origin === window.origin) return;
+      if (ev.origin === this.listener.origin) return;
 
       // pass other events
       const res = ZHandshakeCompleteMsg.safeParse(ev.data);
@@ -240,7 +291,7 @@ export class ICRC35Connection<W extends IPeer> implements IICRC35Connection {
       if (!isEqualUint8Arr(secret, res.data.secret)) return;
 
       if (!this.childExpectsPeer(ev.origin)) {
-        window.removeEventListener("message", handler);
+        this.listener.removeEventListener("message", handler);
         reject(new ICRC35Error(ErrorCode.UNEXPECTED_PEER, `Did not expect a connection from peer '${ev.origin}'`));
 
         return;
@@ -248,12 +299,12 @@ export class ICRC35Connection<W extends IPeer> implements IICRC35Connection {
 
       this.updateTimestamp();
       this._peerOrigin = ev.origin;
-      window.removeEventListener("message", handler);
+      this.listener.removeEventListener("message", handler);
 
       resolve();
     };
 
-    window.addEventListener("message", handler);
+    this.listener.addEventListener("message", handler);
 
     const msg: IHandshakeInitMsg = {
       domain: "icrc-35",
@@ -262,12 +313,20 @@ export class ICRC35Connection<W extends IPeer> implements IICRC35Connection {
     };
 
     this._peer!.postMessage(msg, "*");
+
+    if (this.debug) {
+      log(this.listener.origin, "sent message", msg, "to *");
+    }
   }
 
   private parentHandshake(resolve: ResolveFn, reject: RejectFn) {
     const handler = (ev: MessageEvent<any>) => {
+      if (this.debug) {
+        log(this.listener.origin, "received message", ev.data, "from", ev.origin);
+      }
+
       // pass other events originated from this page
-      if (ev.origin === window.origin) return;
+      if (ev.origin === this.listener.origin) return;
 
       // pass other events
       const res = ZHandshakeInitMsg.safeParse(ev.data);
@@ -281,11 +340,16 @@ export class ICRC35Connection<W extends IPeer> implements IICRC35Connection {
 
       this.updateTimestamp();
       this._peer!.postMessage(msg, this._peerOrigin!);
-      window.removeEventListener("message", handler);
+
+      if (this.debug) {
+        log(this.listener.origin, "sent message", msg, "to", this._peerOrigin);
+      }
+
+      this.listener.removeEventListener("message", handler);
       resolve();
     };
 
-    window.addEventListener("message", handler);
+    this.listener.addEventListener("message", handler);
   }
 
   // returns true if the peer origin is valid

@@ -1,5 +1,5 @@
 import { ICRC35_SECRET_SIZE } from "./consts";
-import { IConnectionFilter } from "./types";
+import { IConnectionFilter, IListener } from "./types";
 
 export function generateSecret(): Uint8Array {
   const res = new Uint8Array(ICRC35_SECRET_SIZE);
@@ -15,6 +15,10 @@ export function generateDefaultFilter(): IConnectionFilter {
     kind: "whitelist",
     list: [],
   };
+}
+
+export function defaultListener(): IListener {
+  return window;
 }
 
 export function isEqualUint8Arr(a: Uint8Array, b: Uint8Array): boolean {
@@ -50,10 +54,20 @@ export class ICRC35Error<E extends Error> extends Error {
   }
 }
 
+function makeTime() {
+  const now = new Date();
+
+  const h = now.getHours().toString().padStart(2, "0");
+  const m = now.getMinutes().toString().padStart(2, "0");
+  const s = now.getSeconds().toString().padStart(2, "0");
+
+  return `${h}:${m}:${s}`;
+}
+
 export function log(...args: any[]) {
-  console.log("<ICRC-35>", ...args);
+  console.log(`[${makeTime()}]`, "<ICRC-35>", ...args);
 }
 
 export function err(...args: any[]) {
-  console.error("<ICRC-35>", ...args);
+  console.error(`[${makeTime()}]`, "<ICRC-35>", ...args);
 }

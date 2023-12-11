@@ -29,7 +29,7 @@ export class Base<P extends object = {}> {
   }
 
   hasPlugin(name: string): boolean {
-    return this.hasOwnProperty(name);
+    return name in this;
   }
 
   assertHasPlugin(name: string) {

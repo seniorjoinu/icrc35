@@ -63,12 +63,24 @@ export type IMsg = z.infer<typeof ZMsg>;
 // ------------- ADDITIONAL TYPES START --------------
 
 export const ZOrigin = z.string().url();
-export const ZPeer = z.custom<IPeer>(
-  (val) =>
+export const ZPeer = z.custom<IPeer>((val) => {
+  const res =
+    typeof val === "object" && "postMessage" in (val as object) && typeof (val as IPeer).postMessage === "function";
+
+  return res;
+});
+export const ZListener = z.custom<IListener>((val) => {
+  const res =
     typeof val === "object" &&
-    (val as object).hasOwnProperty("postMessage") &&
-    typeof (val as IPeer).postMessage === "function"
-);
+    "addEventListener" in (val as object) &&
+    "removeEventListener" in (val as object) &&
+    "origin" in (val as object) &&
+    typeof (val as IListener).addEventListener === "function" &&
+    typeof (val as IListener).removeEventListener === "function" &&
+    typeof (val as IListener).origin === "string";
+
+  return res;
+});
 
 export const ZConnectionFilter = z
   .object({
@@ -77,32 +89,35 @@ export const ZConnectionFilter = z
   })
   .strict();
 
-export const ZEndpointParentMode = z
-  .object({
-    mode: z.literal("parent"),
-    peerOrigin: ZOrigin,
-  })
-  .strict();
-export const ZEndpointChildMode = z
-  .object({
-    mode: z.literal("child"),
-    connectionFilter: z.optional(ZConnectionFilter),
-  })
-  .strict();
+export const ZEndpointParentMode = z.object({
+  mode: z.literal("parent"),
+  peerOrigin: ZOrigin,
+});
+export const ZEndpointChildMode = z.object({
+  mode: z.literal("child"),
+  connectionFilter: z.optional(ZConnectionFilter),
+});
 export const ZEndpointMode = z.discriminatedUnion("mode", [ZEndpointParentMode, ZEndpointChildMode]);
 
 export const ZEndpointModeKind = z.enum(["parent", "child"]);
 
 export const ZICRC35ConnectionConfig = z.object({
   peer: ZPeer,
+  listener: z.optional(ZListener),
   mode: ZEndpointModeKind,
   peerOrigin: z.optional(ZOrigin),
   connectionFilter: z.optional(ZConnectionFilter),
+  debug: z.optional(z.boolean()),
 });
 
 export type TOrigin = z.infer<typeof ZOrigin>;
 export interface IPeer {
   postMessage: (message: any, targetOrigin: string, transfer?: Transferable[]) => void;
+}
+export interface IListener {
+  origin: string;
+  addEventListener(event: "message", listener: (ev: MessageEvent<any>) => void): void;
+  removeEventListener(event: "message", listener: (ev: MessageEvent<any>) => void): void;
 }
 export type IConnectionFilter = z.infer<typeof ZConnectionFilter>;
 export type IEndpointParentMode = z.infer<typeof ZEndpointParentMode>;
@@ -111,10 +126,13 @@ export type EEndpointModeKind = z.infer<typeof ZEndpointModeKind>;
 export type IEndpointMode = {
   mode: EEndpointModeKind;
   connectionFilter?: IConnectionFilter;
+  peerOrigin?: TOrigin;
 };
 
-export interface ICRC35ConnectionConfig<W extends IPeer> extends IEndpointMode {
-  peer: W;
+export interface ICRC35ConnectionConfig<P extends IPeer, L extends IListener> extends IEndpointMode {
+  peer: P;
+  listener?: L;
+  debug?: boolean;
 }
 
 export type ResolveFn = (v: void | PromiseLike<void>) => void;
@@ -132,7 +150,3 @@ export interface IICRC35Connection {
 }
 
 // ------------- ADDITIONAL TYPES END --------------
-// ------------- UTILITY TYPES START ---------------
-
-export type Defined<T> = T extends undefined ? never : T;
-export type Assume<T, U> = T extends U ? T : never;
