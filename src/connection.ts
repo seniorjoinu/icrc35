@@ -68,7 +68,7 @@ export class ICRC35Connection<P extends IPeer, L extends IListener> implements I
     return it;
   }
 
-  send(msg: any, transfer?: Transferable[]) {
+  sendMessage(msg: any, transfer?: Transferable[]) {
     if (!this.isActive()) throw new ICRC35Error(ErrorCode.INVALID_STATE, "Connection closed");
 
     const _msg: ICustomMsg = {

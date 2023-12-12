@@ -142,7 +142,7 @@ export type HandlerFn = (msg: any) => void;
 export type CloseHandlerFn = (reason: "close" | "timeout") => void;
 
 export interface IICRC35Connection {
-  send(msg: any, transfer?: Transferable[]): void;
+  sendMessage(msg: any, transfer?: Transferable[]): void;
   onMessage(handler: HandlerFn): void;
   close(): void;
   onConnectionClosed(handler: CloseHandlerFn): void;

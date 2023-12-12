@@ -1,6 +1,6 @@
 import { ICRC35Connection, IPeer } from "../src";
 import { IListener } from "../src/types";
-import { delay } from "../src/utils";
+import { ErrorCode, ICRC35Error, delay } from "../src/utils";
 
 const originA = "https://a.com";
 const originB = "https://b.com";
@@ -9,7 +9,7 @@ async function make(config?: { breakConnectionAfterHandshake: boolean }) {
   const pipeAB = new TestMsgPipe(originA, originB);
   const pipeBA = new TestMsgPipe(originB, originA);
 
-  const windowAP = ICRC35Connection.establish({
+  const connectionAP = ICRC35Connection.establish({
     peer: pipeBA,
     listener: pipeAB,
     mode: "parent",
@@ -17,7 +17,7 @@ async function make(config?: { breakConnectionAfterHandshake: boolean }) {
     debug: true,
   });
 
-  const windowB = await ICRC35Connection.establish({
+  const connectionB = await ICRC35Connection.establish({
     peer: pipeAB,
     listener: pipeBA,
     mode: "child",
@@ -28,61 +28,224 @@ async function make(config?: { breakConnectionAfterHandshake: boolean }) {
     debug: true,
   });
 
-  const windowA = await windowAP;
+  const connectionA = await connectionAP;
 
   if (config?.breakConnectionAfterHandshake) {
     pipeAB.break();
     pipeBA.break();
   }
 
-  return [windowA, windowB];
+  return [connectionA, connectionB];
 }
 
 describe("icrc35 connection", () => {
   it("should be able to establish and close connection", async () => {
-    const [windowA, windowB] = await make();
+    const [connectionA, connectionB] = await make();
 
-    expect(windowA.isActive()).toBe(true);
-    expect(windowB.isActive()).toBe(true);
+    expect(connectionA.isActive()).toBe(true);
+    expect(connectionB.isActive()).toBe(true);
 
-    expect(windowA.peerOrigin).toBe(originB);
-    expect(windowB.peerOrigin).toBe(originA);
+    expect(connectionA.peerOrigin).toBe(originB);
+    expect(connectionB.peerOrigin).toBe(originA);
 
     const p = new Promise<void>((res, rej) => {
-      windowA.onConnectionClosed((reason) => (reason === "close" ? res() : rej()));
+      connectionA.onConnectionClosed((reason) => (reason === "close" ? res() : rej()));
     });
 
-    windowB.close();
+    connectionB.close();
 
     await p;
   });
 
   it("should keep the connection alive on inactivity", async () => {
-    const [windowA, windowB] = await make();
+    const [connectionA, connectionB] = await make();
 
     await delay(1000 * 10);
 
     const p = new Promise<void>((res, rej) => {
-      windowA.onConnectionClosed((reason) => (reason === "close" ? res() : rej()));
+      connectionA.onConnectionClosed((reason) => (reason === "close" ? res() : rej()));
     });
 
-    windowB.close();
+    connectionB.close();
 
     await p;
   });
 
   it("should disconnect on timeout", async () => {
-    const [windowA, windowB] = await make({ breakConnectionAfterHandshake: true });
+    const [connectionA, connectionB] = await make({ breakConnectionAfterHandshake: true });
 
     const pA = new Promise<void>((res, rej) => {
-      windowA.onConnectionClosed((reason) => (reason === "timeout" ? res() : rej()));
+      connectionA.onConnectionClosed((reason) => (reason === "timeout" ? res() : rej()));
     });
 
     const pB = new Promise<void>((res, rej) => {
-      windowB.onConnectionClosed((reason) => (reason === "timeout" ? res() : rej()));
+      connectionB.onConnectionClosed((reason) => (reason === "timeout" ? res() : rej()));
     });
 
     await Promise.all([pA, pB]);
+  });
+
+  type TestMessage = {
+    a: number;
+    b: string;
+    c: {
+      d: Date;
+    };
+  };
+
+  it("should pass messages back and forth", async () => {
+    const [connectionA, connectionB] = await make();
+    let aDone = false;
+
+    connectionA.onMessage((msg: TestMessage) => {
+      if (msg.a === 0) {
+        connectionA.sendMessage({
+          a: 1,
+          b: "test1",
+          c: {
+            d: new Date(),
+          },
+        });
+
+        return;
+      }
+
+      if (msg.a === 2) {
+        connectionA.sendMessage({
+          a: 3,
+          b: "test3",
+          c: {
+            d: new Date(),
+          },
+        });
+
+        return;
+      }
+
+      if (msg.a === 4) {
+        aDone = true;
+      }
+    });
+
+    let bDone = false;
+
+    connectionB.onMessage((msg: TestMessage) => {
+      if (msg.a === 1) {
+        connectionB.sendMessage({
+          a: 2,
+          b: "test2",
+          c: {
+            d: new Date(),
+          },
+        });
+
+        return;
+      }
+
+      if (msg.a === 3) {
+        connectionB.sendMessage({
+          a: 4,
+          b: "test4",
+          c: {
+            d: new Date(),
+          },
+        });
+
+        bDone = true;
+        return;
+      }
+    });
+
+    connectionB.sendMessage({
+      a: 0,
+      b: "test0",
+      c: {
+        d: new Date(),
+      },
+    });
+
+    while (!(aDone && bDone)) {
+      await delay(50);
+    }
+
+    const p = new Promise<void>((res, rej) => {
+      connectionA.onConnectionClosed((reason) => (reason === "close" ? res() : rej()));
+    });
+
+    connectionB.close();
+
+    await p;
+  });
+
+  it("child should be able to filter a connection out", async () => {
+    const pipeAB = new TestMsgPipe(originA, originB);
+    const pipeBA = new TestMsgPipe(originB, originA);
+
+    let blacklistWorks = false;
+
+    try {
+      const connectionAP = ICRC35Connection.establish({
+        peer: pipeBA,
+        listener: pipeAB,
+        mode: "parent",
+        peerOrigin: originB,
+        debug: true,
+      });
+
+      const connectionB = await ICRC35Connection.establish({
+        peer: pipeAB,
+        listener: pipeBA,
+        mode: "child",
+        connectionFilter: {
+          kind: "blacklist",
+          list: [originA],
+        },
+        debug: true,
+      });
+
+      const connectionA = await connectionAP;
+    } catch (e) {
+      if (e instanceof ICRC35Error) {
+        if (e.code === ErrorCode.UNEXPECTED_PEER) {
+          blacklistWorks = true;
+        }
+      }
+    }
+
+    expect(blacklistWorks).toBe(true);
+
+    let whitelistWorks = false;
+
+    try {
+      const connectionAP = ICRC35Connection.establish({
+        peer: pipeBA,
+        listener: pipeAB,
+        mode: "parent",
+        peerOrigin: originB,
+        debug: true,
+      });
+
+      const connectionB = await ICRC35Connection.establish({
+        peer: pipeAB,
+        listener: pipeBA,
+        mode: "child",
+        connectionFilter: {
+          kind: "whitelist",
+          list: [],
+        },
+        debug: true,
+      });
+
+      const connectionA = await connectionAP;
+    } catch (e) {
+      if (e instanceof ICRC35Error) {
+        if (e.code === ErrorCode.UNEXPECTED_PEER) {
+          whitelistWorks = true;
+        }
+      }
+    }
+
+    expect(whitelistWorks).toBe(true);
   });
 });
 
