@@ -1,45 +1,65 @@
 import { Base, Plugin } from "../src/plugins/plugin-system";
 import { ErrorCode, ICRC35Error } from "../src/utils";
 
-class PluginA extends Plugin {
-  init(): void {}
+class PluginA extends Plugin<"PluginA"> {
+  protected init(): void {}
 
   a() {
     return 1;
   }
+
+  getName(): "PluginA" {
+    return "PluginA";
+  }
 }
 
-class PluginB<P extends { a: PluginA } = { a: PluginA }> extends Plugin<P> {
-  init(): void {
-    this.base.assertHasPlugin("a");
+class PluginB<P extends { PluginA: PluginA } = { PluginA: PluginA }> extends Plugin<"PluginB", P> {
+  protected init(): void {
+    this.base.assertHasPlugin("PluginA");
   }
 
   b() {
-    return this.base.plugins.a.a() + 2;
+    return this.base.plugins.PluginA.a() + 2;
+  }
+
+  getName(): "PluginB" {
+    return "PluginB";
   }
 }
 
-class PluginC<P extends { a: PluginA; b: PluginB } = { a: PluginA; b: PluginB }> extends Plugin<P> {
-  init(): void {
-    this.base.assertHasPlugin("b");
+class PluginC<P extends { PluginA: PluginA; PluginB: PluginB } = { PluginA: PluginA; PluginB: PluginB }> extends Plugin<
+  "PluginC",
+  P
+> {
+  protected init(): void {
+    this.base.assertHasPlugin("PluginA");
+    this.base.assertHasPlugin("PluginB");
   }
 
   c() {
-    return this.base.plugins.a.a() + this.base.plugins.b.b() + 3;
+    return this.base.plugins.PluginA.a() + this.base.plugins.PluginB.b() + 3;
+  }
+
+  getName(): "PluginC" {
+    return "PluginC";
   }
 }
 
 describe("plugin system", () => {
   it("should be able to extend base with plugins + dependencies", async () => {
+    const A = new PluginA();
+    const B = new PluginB();
+    const C = new PluginC();
+
     const engine = new Base({
-      a: new PluginA(),
-      b: new PluginB(),
-      c: new PluginC(),
+      [A.getName()]: A,
+      [B.getName()]: B,
+      [C.getName()]: C,
     });
 
-    expect(engine.plugins.a.a()).toBe(1);
-    expect(engine.plugins.b.b()).toBe(3);
-    expect(engine.plugins.c.c()).toBe(7);
+    expect(engine.plugins.PluginA.a()).toBe(1);
+    expect(engine.plugins.PluginB.b()).toBe(3);
+    expect(engine.plugins.PluginC.c()).toBe(7);
   });
 
   it("should throw if a dependency is not satisfied", async () => {

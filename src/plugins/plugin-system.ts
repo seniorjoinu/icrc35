@@ -1,6 +1,6 @@
 import { ErrorCode, ICRC35Error } from "../utils";
 
-export abstract class Plugin<DEPS extends object = {}> {
+export abstract class Plugin<N extends string, DEPS extends object = {}> {
   private _base: Base<DEPS> | null = null;
 
   private install(base: Base<DEPS>) {
@@ -14,7 +14,9 @@ export abstract class Plugin<DEPS extends object = {}> {
     return this._base!;
   }
 
-  abstract init(): void;
+  protected abstract init(): void;
+
+  abstract getName(): N;
 }
 
 export class Base<P extends object = {}> {

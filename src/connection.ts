@@ -33,7 +33,6 @@ import {
   generateDefaultFilter,
   generateSecret,
   isEqualUint8Arr,
-  delay,
   defaultListener,
   log,
 } from "./utils";
@@ -101,7 +100,7 @@ export class ICRC35Connection<P extends IPeer, L extends IListener> implements I
       log(this.listener.origin, "sent message", msg, "from", this.peerOrigin);
     }
 
-    this.handleConnectionClosed(null);
+    this.handleConnectionClosed("closed by this");
   }
 
   onConnectionClosed(handler: CloseHandlerFn) {
@@ -145,7 +144,7 @@ export class ICRC35Connection<P extends IPeer, L extends IListener> implements I
         const r = ZConnectionClosedMsg.safeParse(res.data);
         if (!r.success) return;
 
-        this.handleConnectionClosed("close");
+        this.handleConnectionClosed("closed by peer");
         return;
       }
       case "Ping": {
@@ -189,7 +188,7 @@ export class ICRC35Connection<P extends IPeer, L extends IListener> implements I
       const delta = Date.now() - this.lastReceivedMsgTimestamp;
 
       if (delta >= ICRC35_CONNECTION_TIMEOUT_MS) {
-        this.handleConnectionClosed("timeout");
+        this.handleConnectionClosed("timed out");
         clearInterval(int);
         return;
       }
@@ -211,13 +210,16 @@ export class ICRC35Connection<P extends IPeer, L extends IListener> implements I
     }, ICRC35_PING_TIMEOUT_MS);
   }
 
-  private handleConnectionClosed(reason: "close" | "timeout" | null) {
+  private handleConnectionClosed(reason: "closed by peer" | "timed out" | "closed by this") {
     this._peer = null;
     this.listener.removeEventListener("message", this.listen);
 
-    if (reason !== null && this.closeHandler !== null) {
+    if (this.closeHandler !== null) {
       this.closeHandler(reason);
+      this.closeHandler = null;
     }
+
+    this.handler = null;
   }
 
   private handlePing() {

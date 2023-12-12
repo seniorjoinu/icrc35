@@ -1,6 +1,6 @@
 {
   "compilerOptions": {
-    "rootDir": "src",
+    "rootDir": ".",
     "target": "ESNext",
     "moduleResolution": "Node",
     "declaration": true,
@@ -11,5 +11,5 @@
     "strict": true,
     "lib": ["ESNext", "DOM"]
   },
-  "exclude": ["./dist", "**/src/**/*.test.ts"]
+  "exclude": ["./dist"]
 }

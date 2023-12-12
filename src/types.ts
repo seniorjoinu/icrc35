@@ -135,11 +135,11 @@ export interface ICRC35ConnectionConfig<P extends IPeer, L extends IListener> ex
   debug?: boolean;
 }
 
-export type ResolveFn = (v: void | PromiseLike<void>) => void;
+export type ResolveFn<T extends void = void> = (v: T | PromiseLike<T>) => void;
 export type RejectFn = (reason?: any) => void;
 
 export type HandlerFn = (msg: any) => void;
-export type CloseHandlerFn = (reason: "close" | "timeout") => void;
+export type CloseHandlerFn = (reason: "closed by peer" | "timed out" | "closed by this") => void;
 
 export interface IICRC35Connection {
   sendMessage(msg: any, transfer?: Transferable[]): void;
