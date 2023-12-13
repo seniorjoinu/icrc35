@@ -6,5 +6,5 @@
     "module": "ESNext",
     "moduleResolution": "Node",
   },
-  "exclude": ["**/src/**/*.test.ts"]
+  "exclude": ["./dist", "test/**/*.ts"]
 }

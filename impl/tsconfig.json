@@ -1,6 +1,7 @@
 {
   "compilerOptions": {
     "rootDir": ".",
+    "incremental": true,
     "target": "ESNext",
     "moduleResolution": "Node",
     "declaration": true,
@@ -11,5 +12,5 @@
     "strict": true,
     "lib": ["ESNext", "DOM"]
   },
-  "exclude": ["./dist"]
+  "exclude": ["./dist"],
 }

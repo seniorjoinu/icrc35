@@ -36,6 +36,7 @@ export async function delay(ms: number): Promise<void> {
 }
 
 export enum ErrorCode {
+  UNSUPPORTED_FEATURE = "IRCR35_UNSUPPORTED_FEATURE",
   UNEXPECTED_PEER = "ICRC35_UNEXPECTED_PEER",
   INVALID_STATE = "ICRC35_INVALID_STATE",
   UNREACHEABLE = "ICRC35_UNREACHEABLE",
@@ -70,4 +71,22 @@ export function log(...args: any[]) {
 
 export function err(...args: any[]) {
   console.error(`[${makeTime()}]`, "<ICRC-35>", ...args);
+}
+
+export function openICRC35Window(origin: string | URL): Window {
+  // force it to be a URL
+  if (!(origin instanceof URL)) {
+    origin = new URL(origin);
+  }
+
+  // force it to be an origin
+  origin = origin.origin;
+
+  const w = window.open(new URL("/icrc35", origin));
+
+  if (w === null) {
+    throw new ICRC35Error(ErrorCode.UNSUPPORTED_FEATURE, "Unable to open a new browser window");
+  }
+
+  return w;
 }
