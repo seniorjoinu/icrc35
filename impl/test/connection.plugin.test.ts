@@ -1,6 +1,5 @@
 import { ICRC35Connection } from "../src";
-import { ICRC35ConnectionPlugin } from "../src/plugins/connection.plugin";
-import { Base } from "../src/plugins/plugin-system";
+import { ICRC35 } from "../src/index";
 import { ErrorCode, ICRC35Error, delay } from "../src/utils";
 import { TestMsgPipe, originA, originB } from "./utils";
 
@@ -152,9 +151,9 @@ describe("icrc35 connection", () => {
     try {
       const connectionAP = ICRC35Connection.establish({
         peer: pipeBA,
+        peerOrigin: originB,
         listener: pipeAB,
         mode: "parent",
-        peerOrigin: originB,
         debug: true,
       });
 
@@ -185,9 +184,9 @@ describe("icrc35 connection", () => {
     try {
       const connectionAP = ICRC35Connection.establish({
         peer: pipeBA,
+        peerOrigin: originB,
         listener: pipeAB,
         mode: "parent",
-        peerOrigin: originB,
         debug: true,
       });
 
@@ -221,9 +220,9 @@ async function make(config?: { breakConnectionAfterHandshake: boolean }) {
 
   const connectionAP = ICRC35Connection.establish({
     peer: pipeBA,
+    peerOrigin: originB,
     listener: pipeAB,
     mode: "parent",
-    peerOrigin: originB,
     debug: true,
   });
 
@@ -245,15 +244,8 @@ async function make(config?: { breakConnectionAfterHandshake: boolean }) {
     pipeBA.break();
   }
 
-  const connectionPluginA = new ICRC35ConnectionPlugin(connectionA);
-  const endpointA = new Base({
-    [connectionPluginA.getName()]: connectionPluginA,
-  });
-
-  const connectionPluginB = new ICRC35ConnectionPlugin(connectionB);
-  const endpointB = new Base({
-    [connectionPluginB.getName()]: connectionPluginB,
-  });
+  const endpointA = new ICRC35(connectionA);
+  const endpointB = new ICRC35(connectionB);
 
   return [endpointA, endpointB];
 }

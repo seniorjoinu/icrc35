@@ -1,7 +1,8 @@
 import {
   CloseHandlerFn,
   HandlerFn,
-  ICRC35ConnectionConfig,
+  ICRC35ConnectionChildConfig,
+  ICRC35ConnectionParentConfig,
   IConnectionClosedMsg,
   ICustomMsg,
   IEndpointChildMode,
@@ -44,14 +45,14 @@ export class ICRC35Connection<P extends IPeer, L extends IListener> implements I
   private _listener: L;
   private mode: IEndpointChildMode | IEndpointParentMode;
   private lastReceivedMsgTimestamp: number = 0;
-  private handler: HandlerFn | null = null;
-  private closeHandler: CloseHandlerFn | null = null;
+  private msgHandlers: HandlerFn[] = [];
+  private closeHandlers: CloseHandlerFn[] = [];
   private debug: boolean;
 
   static async establish<P extends IPeer, L extends IListener>(
-    config: ICRC35ConnectionConfig<P, L>
-  ): Promise<ICRC35Connection<P, L>> {
-    const it = new ICRC35Connection(config);
+    config: ICRC35ConnectionChildConfig<P, L> | ICRC35ConnectionParentConfig<P, L>
+  ): Promise<IICRC35Connection> {
+    const it = new ICRC35Connection<P, L>(config);
 
     await new Promise<void>((resolve, reject) => {
       if (config.mode === "child") {
@@ -84,7 +85,14 @@ export class ICRC35Connection<P extends IPeer, L extends IListener> implements I
   }
 
   onMessage(handler: HandlerFn) {
-    this.handler = handler;
+    this.msgHandlers.push(handler);
+  }
+
+  removeMessageHandler(handler: HandlerFn) {
+    const idx = this.msgHandlers.indexOf(handler);
+    if (idx < 0) return;
+
+    this.msgHandlers.splice(idx, 1);
   }
 
   close() {
@@ -104,7 +112,14 @@ export class ICRC35Connection<P extends IPeer, L extends IListener> implements I
   }
 
   onConnectionClosed(handler: CloseHandlerFn) {
-    this.closeHandler = handler;
+    this.closeHandlers.push(handler);
+  }
+
+  removeConnectionClosedHandler(handler: CloseHandlerFn) {
+    const idx = this.closeHandlers.indexOf(handler);
+    if (idx < 0) return;
+
+    this.closeHandlers.splice(idx, 1);
   }
 
   isActive(): this is { peer: P; peerOrigin: string } {
@@ -116,7 +131,7 @@ export class ICRC35Connection<P extends IPeer, L extends IListener> implements I
   }
 
   get peerOrigin() {
-    return this._peerOrigin;
+    return this._peerOrigin!;
   }
 
   get listener() {
@@ -124,10 +139,6 @@ export class ICRC35Connection<P extends IPeer, L extends IListener> implements I
   }
 
   private listen = (ev: MessageEvent<any>) => {
-    if (this.debug) {
-      log(this.listener.origin, "received message", ev.data, "from", ev.origin);
-    }
-
     // pass if the connection is already closed
     if (!this.isActive()) return;
 
@@ -138,6 +149,10 @@ export class ICRC35Connection<P extends IPeer, L extends IListener> implements I
 
     // ignore non-icrc35 messages
     if (!res.success) return;
+
+    if (this.debug) {
+      log(this.listener.origin, "received message", ev.data, "from", ev.origin);
+    }
 
     switch (res.data.kind) {
       case "ConnectionClosed": {
@@ -213,13 +228,13 @@ export class ICRC35Connection<P extends IPeer, L extends IListener> implements I
   private handleConnectionClosed(reason: "closed by peer" | "timed out" | "closed by this") {
     this._peer = null;
     this.listener.removeEventListener("message", this.listen);
+    this.msgHandlers = [];
 
-    if (this.closeHandler !== null) {
-      this.closeHandler(reason);
-      this.closeHandler = null;
+    for (let closeHandler of this.closeHandlers) {
+      closeHandler(reason);
     }
 
-    this.handler = null;
+    this.closeHandlers = [];
   }
 
   private handlePing() {
@@ -244,44 +259,43 @@ export class ICRC35Connection<P extends IPeer, L extends IListener> implements I
   private handleCustom(data: any) {
     this.updateTimestamp();
 
-    if (!this.handler) return null;
-
-    this.handler(data);
+    for (let handler of this.msgHandlers) {
+      handler(data);
+    }
   }
 
   private updateTimestamp() {
     this.lastReceivedMsgTimestamp = Date.now();
   }
 
-  private constructor(config: ICRC35ConnectionConfig<P, L>) {
-    // @ts-expect-error - all we need here is to be able to call .postMessage() on the peer, we don't care about it's inner structure or subtypes
-    config = ZICRC35ConnectionConfig.parse(config);
+  private constructor(config: ICRC35ConnectionChildConfig<P, L> | ICRC35ConnectionParentConfig<P, L>) {
+    const parsedConfig = ZICRC35ConnectionConfig.parse(config);
 
-    this._peer = config.peer;
-    if (!config.listener) {
+    this._peer = parsedConfig.peer as P;
+    if (!parsedConfig.listener) {
       this._listener = defaultListener() as L;
     } else {
-      this._listener = config.listener;
+      this._listener = parsedConfig.listener as L;
     }
 
-    this.debug = config.debug || DEFAULT_DEBUG;
+    this.debug = parsedConfig.debug || DEFAULT_DEBUG;
 
-    if (config.mode === "parent") {
-      this.mode = ZEndpointParentMode.parse(config);
-      this._peerOrigin = this.mode.peerOrigin;
+    if (parsedConfig.mode === "parent") {
+      this.mode = ZEndpointParentMode.parse(parsedConfig);
+      this._peerOrigin = parsedConfig.peerOrigin!;
     } else {
-      this.mode = ZEndpointChildMode.parse(config);
+      this.mode = ZEndpointChildMode.parse(parsedConfig);
     }
   }
 
   private childHandshake(resolve: ResolveFn, reject: RejectFn) {
     const secret = generateSecret();
 
-    const handler = (ev: MessageEvent<any>) => {
-      if (this.debug) {
-        log(this.listener.origin, "received message", ev.data, "from", ev.origin);
-      }
+    if (this.debug) {
+      log(this.listener.origin, "child-level handshake started...");
+    }
 
+    const handler = (ev: MessageEvent<any>) => {
       // pass other events originated from this page
       if (ev.origin === this.listener.origin) return;
 
@@ -289,14 +303,28 @@ export class ICRC35Connection<P extends IPeer, L extends IListener> implements I
       const res = ZHandshakeCompleteMsg.safeParse(ev.data);
       if (!res.success) return;
 
+      if (this.debug) {
+        log(this.listener.origin, "received message", ev.data, "from", ev.origin);
+      }
+
       // pass events with other secrets (this would mean some other page is trying to get in)
-      if (!isEqualUint8Arr(secret, res.data.secret)) return;
+      if (!isEqualUint8Arr(secret, res.data.secret)) {
+        if (this.debug) {
+          log(this.listener.origin, "incorrect secret, ignoring...");
+        }
+
+        return;
+      }
 
       if (!this.childExpectsPeer(ev.origin)) {
         this.listener.removeEventListener("message", handler);
         reject(new ICRC35Error(ErrorCode.UNEXPECTED_PEER, `Did not expect a connection from peer '${ev.origin}'`));
 
         return;
+      }
+
+      if (this.debug) {
+        log(this.listener.origin, `child-level handshake complete, peer origin = ${ev.origin}`);
       }
 
       this.updateTimestamp();
@@ -322,11 +350,11 @@ export class ICRC35Connection<P extends IPeer, L extends IListener> implements I
   }
 
   private parentHandshake(resolve: ResolveFn, reject: RejectFn) {
-    const handler = (ev: MessageEvent<any>) => {
-      if (this.debug) {
-        log(this.listener.origin, "received message", ev.data, "from", ev.origin);
-      }
+    if (this.debug) {
+      log(this.listener.origin, "parent-level handshake started...");
+    }
 
+    const handler = (ev: MessageEvent<any>) => {
       // pass other events originated from this page
       if (ev.origin === this.listener.origin) return;
 
@@ -334,11 +362,19 @@ export class ICRC35Connection<P extends IPeer, L extends IListener> implements I
       const res = ZHandshakeInitMsg.safeParse(ev.data);
       if (!res.success) return;
 
+      if (this.debug) {
+        log(this.listener.origin, "received message", ev.data, "from", ev.origin);
+      }
+
       const msg: IHandshakeCompleteMsg = {
         domain: "icrc-35",
         kind: "HandshakeComplete",
         secret: res.data.secret,
       };
+
+      if (this.debug) {
+        log(this.listener.origin, `parent-level handshake complete, peer origin = ${this._peerOrigin}`);
+      }
 
       this.updateTimestamp();
       this._peer!.postMessage(msg, this._peerOrigin!);

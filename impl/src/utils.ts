@@ -1,5 +1,8 @@
+import { ICRC35Connection } from "./connection";
 import { ICRC35_SECRET_SIZE } from "./consts";
-import { IConnectionFilter, IListener } from "./types";
+import { ICRC35AsyncPlugin } from "./plugins/async.plugin";
+import { ICRC35ConnectionPlugin } from "./plugins/connection.plugin";
+import { IConnectionFilter, IListener, IPeer } from "./types";
 
 export function generateSecret(): Uint8Array {
   const res = new Uint8Array(ICRC35_SECRET_SIZE);
@@ -73,7 +76,7 @@ export function err(...args: any[]) {
   console.error(`[${makeTime()}]`, "<ICRC-35>", ...args);
 }
 
-export function openICRC35Window(origin: string | URL): Window {
+export function openICRC35Window(origin: string | URL): { peer: Window; peerOrigin: string } {
   // force it to be a URL
   if (!(origin instanceof URL)) {
     origin = new URL(origin);
@@ -82,11 +85,11 @@ export function openICRC35Window(origin: string | URL): Window {
   // force it to be an origin
   origin = origin.origin;
 
-  const w = window.open(new URL("/icrc35", origin));
+  const w = window.open(new URL("/icrc35", origin), "_blank");
 
   if (w === null) {
     throw new ICRC35Error(ErrorCode.UNSUPPORTED_FEATURE, "Unable to open a new browser window");
   }
 
-  return w;
+  return { peer: w, peerOrigin: origin };
 }

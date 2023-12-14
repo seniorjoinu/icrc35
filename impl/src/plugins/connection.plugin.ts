@@ -1,11 +1,7 @@
-import { ICRC35Connection } from "../connection";
-import { IListener, IPeer, IICRC35Connection, CloseHandlerFn, HandlerFn } from "../types";
-import { Plugin } from "./plugin-system";
+import { IICRC35Connection, CloseHandlerFn, HandlerFn } from "../types";
+import { ICRC35Plugin } from "./plugin";
 
-export class ICRC35ConnectionPlugin<L extends IPeer = IPeer, P extends IListener = IListener>
-  extends Plugin<"ICRC35Connection">
-  implements IICRC35Connection
-{
+export class ICRC35ConnectionPlugin extends ICRC35Plugin<"ICRC35Connection"> implements IICRC35Connection {
   protected init(): void {}
 
   getName(): "ICRC35Connection" {
@@ -16,7 +12,7 @@ export class ICRC35ConnectionPlugin<L extends IPeer = IPeer, P extends IListener
     return this.connection.peerOrigin;
   }
 
-  constructor(private connection: ICRC35Connection<L, P>) {
+  constructor(private connection: IICRC35Connection) {
     super();
   }
 
@@ -28,12 +24,20 @@ export class ICRC35ConnectionPlugin<L extends IPeer = IPeer, P extends IListener
     this.connection.onMessage(handler);
   }
 
+  removeMessageHandler(handler: HandlerFn): void {
+    this.connection.removeMessageHandler(handler);
+  }
+
   close(): void {
     this.connection.close();
   }
 
   onConnectionClosed(handler: CloseHandlerFn): void {
     this.connection.onConnectionClosed(handler);
+  }
+
+  removeConnectionClosedHandler(handler: CloseHandlerFn): void {
+    this.connection.removeConnectionClosedHandler(handler);
   }
 
   isActive(): boolean {

@@ -4,9 +4,9 @@ export const originA = "https://a.com";
 export const originB = "https://b.com";
 
 export class TestMsgPipe implements IPeer, IListener {
-  origin: string;
-  peerOrigin: string;
-  listeners: ((ev: MessageEvent<unknown>) => void)[] = [];
+  readonly origin: string;
+  readonly peerOrigin: string;
+  readonly listeners: ((ev: MessageEvent<unknown>) => void)[] = [];
   private broken: boolean = false;
 
   constructor(myOrigin: string, peerOrigin: string) {

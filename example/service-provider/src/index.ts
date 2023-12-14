@@ -1,5 +1,5 @@
 import { ExamplePlugin } from "example-icrc35-plugin";
-import { Base, ICRC35AsyncPlugin, ICRC35Connection, ICRC35ConnectionPlugin, IPeer } from "icrc-35";
+import { ICRC35, ICRC35Connection } from "icrc-35";
 
 if (window.location.pathname !== "/icrc35") {
   alert("Wrong ICRC-35 path: go to /icrc35");
@@ -11,39 +11,21 @@ if (!window.opener) {
 
 window.addEventListener("load", async () => {
   // establish ICRC-35 connection
-  const peer = window.opener as IPeer;
   const connection = await ICRC35Connection.establish({
     mode: "child",
     connectionFilter: {
       kind: "blacklist",
       list: [],
     },
-    peer,
+    peer: window.opener,
     debug: true,
   });
 
-  // create plugin system
-  const connectionPlugin = new ICRC35ConnectionPlugin(connection);
-  const asyncPlugin = new ICRC35AsyncPlugin();
-  const examplePlugin: ExamplePlugin = new ExamplePlugin();
-
-  const endpoint = new Base({
-    [connectionPlugin.getName()]: connectionPlugin,
-    [asyncPlugin.getName()]: asyncPlugin,
-    [examplePlugin.getName()]: examplePlugin,
-  });
+  // the receiver side does not need to enable the plugin, if it only receives requests and responds to them, without sending requests itself
+  const icrc35 = new ICRC35(connection);
 
   // wait for a request from peer
-  let greetRequest = await endpoint.plugins.ICRC35Async.asyncNext();
-
-  // ignore all other routes
-  switch (greetRequest.route) {
-    case ExamplePlugin.GreetRoute:
-      break;
-
-    default:
-      return;
-  }
+  let greetRequest = await icrc35.plugins.ICRC35Async.next([ExamplePlugin.GreetRoute]);
 
   // validate inputs
   const name = greetRequest.body as string;
@@ -59,7 +41,7 @@ window.addEventListener("load", async () => {
 
   // close the connection and the window
   setTimeout(() => {
-    endpoint.plugins.ICRC35Connection.close();
+    icrc35.plugins.ICRC35Connection.close();
     window.close();
   }, 100);
 });

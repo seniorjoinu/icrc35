@@ -1,8 +1,7 @@
 import { ICRC35Connection } from "../src";
-import { ICRC35AsyncPlugin, Request } from "../src/plugins/async.plugin";
-import { ICRC35ConnectionPlugin } from "../src/plugins/connection.plugin";
-import { Base } from "../src/plugins/plugin-system";
-import { ErrorCode, ICRC35Error, delay } from "../src/utils";
+import { ICRC35AsyncRequest } from "../src/plugins/async.plugin";
+import { ICRC35 } from "../src/index";
+import { ErrorCode, ICRC35Error } from "../src/utils";
 import { TestMsgPipe, originA, originB } from "./utils";
 
 describe("async plugin", () => {
@@ -11,10 +10,10 @@ describe("async plugin", () => {
 
     const responsePromise = endpointA.plugins.ICRC35Async.call("test:123", { a: 1, b: "2" });
 
-    let request: any = await endpointB.plugins.ICRC35Async.asyncNext();
+    let request: any = await endpointB.plugins.ICRC35Async.next();
 
     expect(request).toBeDefined();
-    expect(request).toBeInstanceOf(Request);
+    expect(request).toBeInstanceOf(ICRC35AsyncRequest);
     expect(request!.route).toBe("test:123");
     expect(request!.body).toBeDefined();
     expect(typeof request!.body).toBe("object");
@@ -85,8 +84,8 @@ describe("async plugin", () => {
     const responsePromise1 = endpointA.plugins.ICRC35Async.call("test:abc:def", { a: 1 });
     const responsePromise2 = endpointA.plugins.ICRC35Async.call("test:abc:def", { a: 2 });
 
-    const request1 = await endpointB.plugins.ICRC35Async.asyncNext();
-    const request2 = await endpointB.plugins.ICRC35Async.asyncNext();
+    const request1 = await endpointB.plugins.ICRC35Async.next(["test:abc:def"]);
+    const request2 = await endpointB.plugins.ICRC35Async.next(["test:abc:def"]);
 
     expect((request1.body as { a: number }).a).toBe(1);
     expect((request2.body as { a: number }).a).toBe(2);
@@ -108,9 +107,9 @@ async function make(config?: { breakConnectionAfterHandshake: boolean }) {
 
   const connectionAP = ICRC35Connection.establish({
     peer: pipeBA,
+    peerOrigin: originB,
     listener: pipeAB,
     mode: "parent",
-    peerOrigin: originB,
     debug: true,
   });
 
@@ -132,19 +131,8 @@ async function make(config?: { breakConnectionAfterHandshake: boolean }) {
     pipeBA.break();
   }
 
-  const connectionPluginA = new ICRC35ConnectionPlugin(connectionA);
-  const asyncPluginA = new ICRC35AsyncPlugin();
-  const endpointA = new Base({
-    [connectionPluginA.getName()]: connectionPluginA,
-    [asyncPluginA.getName()]: asyncPluginA,
-  });
-
-  const connectionPluginB = new ICRC35ConnectionPlugin(connectionB);
-  const asyncPluginB = new ICRC35AsyncPlugin();
-  const endpointB = new Base({
-    [connectionPluginB.getName()]: connectionPluginB,
-    [asyncPluginB.getName()]: asyncPluginB,
-  });
+  const endpointA = new ICRC35(connectionA);
+  const endpointB = new ICRC35(connectionB);
 
   return [endpointA, endpointB];
 }

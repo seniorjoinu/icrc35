@@ -1,14 +1,11 @@
 import z from "zod";
-import { ICRC35ConnectionPlugin } from "./connection.plugin";
-import { Plugin } from "./plugin-system";
-import { RejectFn, ResolveFn } from "../types";
+import { ICRC35Plugin } from "./plugin";
+import { RejectFn, ResolveFn, TOrigin } from "../types";
 import { ErrorCode, ICRC35Error, delay } from "../utils";
 
-export class ICRC35AsyncPlugin<
-  P extends { ICRC35Connection: ICRC35ConnectionPlugin } = { ICRC35Connection: ICRC35ConnectionPlugin }
-> extends Plugin<"ICRC35Async", P> {
+export class ICRC35AsyncPlugin extends ICRC35Plugin<"ICRC35Async"> {
   private sentRequests: Record<TRequestId, [ResolveFn<any>, RejectFn]> = {};
-  private receivedRequests: Request<any>[] = [];
+  private receivedRequests: ICRC35AsyncRequest<any>[] = [];
 
   getName(): "ICRC35Async" {
     return "ICRC35Async";
@@ -18,23 +15,29 @@ export class ICRC35AsyncPlugin<
     this.base.assertHasPlugin("ICRC35Connection");
 
     this.base.plugins.ICRC35Connection.onMessage((msg) => {
+      // ignore other messages
       const res = ZAsyncMsg.safeParse(msg);
       if (!res.success) return;
 
       if (res.data.kind === "request") {
         const route = ZRoute.parse(res.data.route);
-        const request = new Request(this, res.data.requestId, route, res.data.body);
+
+        const request = new ICRC35AsyncRequest({
+          plugin: this,
+          requestId: res.data.requestId,
+          peerOrigin: this.base.plugins.ICRC35Connection.peerOrigin!,
+          route: route,
+          body: res.data.body,
+        });
 
         this.receivedRequests.push(request);
         return;
       }
 
       if (res.data.kind === "response") {
+        // ignore responses for non-existing requests
         if (!(res.data.requestId in this.sentRequests)) {
-          throw new ICRC35Error(
-            ErrorCode.UNREACHEABLE,
-            `Received a response for non existing request with id ${res.data.requestId}: ${res.data.body}`
-          );
+          return;
         }
 
         const [resolve, _] = this.sentRequests[res.data.requestId];
@@ -54,15 +57,20 @@ export class ICRC35AsyncPlugin<
     });
   }
 
-  next<R extends unknown>(): Request<R> | undefined {
-    return this.receivedRequests.shift();
+  tryNext<R extends unknown>(allowedRoutes?: TRoute[]): ICRC35AsyncRequest<R> | undefined {
+    if (allowedRoutes === undefined) return this.receivedRequests.shift();
+
+    const idx = this.receivedRequests.findIndex((it) => allowedRoutes.includes(it.route));
+    if (idx < 0) return undefined;
+
+    return this.receivedRequests.splice(idx, 1)[0];
   }
 
-  async asyncNext<R extends unknown>(delayMs: number = 50): Promise<Request<R>> {
+  async next<R extends unknown>(allowedRoutes?: TRoute[], delayMs: number = 50): Promise<ICRC35AsyncRequest<R>> {
     while (this.base.plugins.ICRC35Connection.isActive()) {
-      const req = this.next();
+      const req = this.tryNext(allowedRoutes);
 
-      if (req) return req as Request<R>;
+      if (req) return req as ICRC35AsyncRequest<R>;
 
       await delay(delayMs);
     }
@@ -103,19 +111,25 @@ export class ICRC35AsyncPlugin<
     this.base.plugins.ICRC35Connection.sendMessage(msg, transfer);
   }
 
-  // used by Request
+  // used by ICRC35AsyncRequest
   private closeConnection() {
     this.base.plugins.ICRC35Connection.close();
   }
 }
+export class ICRC35AsyncRequest<T extends unknown> {
+  private plugin: ICRC35AsyncPlugin;
+  private requestId: TRequestId;
+  public readonly peerOrigin: TOrigin;
+  public readonly route: TRoute;
+  public readonly body: T;
 
-export class Request<T extends unknown> {
-  constructor(
-    private plugin: ICRC35AsyncPlugin,
-    private requestId: TRequestId,
-    public readonly route: TRoute,
-    public readonly body: T
-  ) {}
+  constructor(init: { plugin: ICRC35AsyncPlugin; requestId: TRequestId; peerOrigin: TOrigin; route: TRoute; body: T }) {
+    this.plugin = init.plugin;
+    this.requestId = init.requestId;
+    this.peerOrigin = init.peerOrigin;
+    this.route = init.route;
+    this.body = init.body;
+  }
 
   respond<T extends unknown>(response: T, transfer?: Transferable[]) {
     this.plugin.respond(this.requestId, response, transfer);

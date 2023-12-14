@@ -7,9 +7,6 @@
             "^build"
         ]
       },
-      "pub": {
-        "cache": false
-      },
       "dev": {},
       "test": {
         "cache": false

@@ -1,8 +1,6 @@
-import { Plugin, ICRC35AsyncPlugin } from "icrc-35";
+import { ICRC35Plugin } from "icrc-35";
 
-export class ExamplePlugin<
-  P extends { ICRC35Async: ICRC35AsyncPlugin } = { ICRC35Async: ICRC35AsyncPlugin }
-> extends Plugin<"Example", P> {
+export class ExamplePlugin extends ICRC35Plugin<"Example"> {
   protected init(): void {
     this.base.assertHasPlugin("ICRC35Async");
   }

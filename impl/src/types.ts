@@ -123,16 +123,23 @@ export type IConnectionFilter = z.infer<typeof ZConnectionFilter>;
 export type IEndpointParentMode = z.infer<typeof ZEndpointParentMode>;
 export type IEndpointChildMode = z.infer<typeof ZEndpointChildMode>;
 export type EEndpointModeKind = z.infer<typeof ZEndpointModeKind>;
-export type IEndpointMode = {
-  mode: EEndpointModeKind;
-  connectionFilter?: IConnectionFilter;
-  peerOrigin?: TOrigin;
-};
+export type IEndpointMode = z.infer<typeof ZEndpointMode>;
 
-export interface ICRC35ConnectionConfig<P extends IPeer, L extends IListener> extends IEndpointMode {
+interface ICRC35ConnectionConfig<P extends IPeer, L extends IListener> {
   peer: P;
   listener?: L;
   debug?: boolean;
+  mode: EEndpointModeKind;
+}
+
+export interface ICRC35ConnectionChildConfig<P extends IPeer, L extends IListener>
+  extends ICRC35ConnectionConfig<P, L> {
+  connectionFilter: IConnectionFilter;
+}
+
+export interface ICRC35ConnectionParentConfig<P extends IPeer, L extends IListener>
+  extends ICRC35ConnectionConfig<P, L> {
+  peerOrigin: TOrigin;
 }
 
 export type ResolveFn<T extends void = void> = (v: T | PromiseLike<T>) => void;
@@ -142,10 +149,13 @@ export type HandlerFn = (msg: any) => void;
 export type CloseHandlerFn = (reason: "closed by peer" | "timed out" | "closed by this") => void;
 
 export interface IICRC35Connection {
+  readonly peerOrigin: TOrigin;
   sendMessage(msg: any, transfer?: Transferable[]): void;
   onMessage(handler: HandlerFn): void;
+  removeMessageHandler(handler: HandlerFn): void;
   close(): void;
   onConnectionClosed(handler: CloseHandlerFn): void;
+  removeConnectionClosedHandler(handler: CloseHandlerFn): void;
   isActive(): boolean;
 }
 
