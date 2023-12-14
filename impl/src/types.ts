@@ -146,7 +146,9 @@ export type ResolveFn<T extends void = void> = (v: T | PromiseLike<T>) => void;
 export type RejectFn = (reason?: any) => void;
 
 export type HandlerFn = (msg: any) => void;
-export type CloseHandlerFn = (reason: "closed by peer" | "timed out" | "closed by this") => void;
+export type ConnectionClosedReason = "closed by this" | "closed by peer" | "timed out";
+export type AfterCloseHandlerFn = (reason: ConnectionClosedReason) => void;
+export type BeforeCloseHandlerFn = () => void;
 
 export interface IICRC35Connection {
   readonly peerOrigin: TOrigin;
@@ -154,8 +156,10 @@ export interface IICRC35Connection {
   onMessage(handler: HandlerFn): void;
   removeMessageHandler(handler: HandlerFn): void;
   close(): void;
-  onConnectionClosed(handler: CloseHandlerFn): void;
-  removeConnectionClosedHandler(handler: CloseHandlerFn): void;
+  onBeforeConnectionClosed(handler: BeforeCloseHandlerFn): void;
+  removeBeforeConnectionClosedHandler(handler: BeforeCloseHandlerFn): void;
+  onAfterConnectionClosed(handler: AfterCloseHandlerFn): void;
+  removeAfterConnectionClosedHandler(handler: AfterCloseHandlerFn): void;
   isActive(): boolean;
 }
 

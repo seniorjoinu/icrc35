@@ -1,5 +1,7 @@
 import {
-  CloseHandlerFn,
+  AfterCloseHandlerFn,
+  BeforeCloseHandlerFn,
+  ConnectionClosedReason,
   HandlerFn,
   ICRC35ConnectionChildConfig,
   ICRC35ConnectionParentConfig,
@@ -46,7 +48,8 @@ export class ICRC35Connection<P extends IPeer, L extends IListener> implements I
   private mode: IEndpointChildMode | IEndpointParentMode;
   private lastReceivedMsgTimestamp: number = 0;
   private msgHandlers: HandlerFn[] = [];
-  private closeHandlers: CloseHandlerFn[] = [];
+  private beforeCloseHandlers: BeforeCloseHandlerFn[] = [];
+  private afterCloseHandlers: AfterCloseHandlerFn[] = [];
   private debug: boolean;
 
   static async establish<P extends IPeer, L extends IListener>(
@@ -98,6 +101,11 @@ export class ICRC35Connection<P extends IPeer, L extends IListener> implements I
   close() {
     if (!this.isActive()) return;
 
+    for (let beforeCloseHandler of this.beforeCloseHandlers) {
+      beforeCloseHandler();
+    }
+    this.beforeCloseHandlers = [];
+
     const msg: IConnectionClosedMsg = {
       domain: "icrc-35",
       kind: "ConnectionClosed",
@@ -111,15 +119,26 @@ export class ICRC35Connection<P extends IPeer, L extends IListener> implements I
     this.handleConnectionClosed("closed by this");
   }
 
-  onConnectionClosed(handler: CloseHandlerFn) {
-    this.closeHandlers.push(handler);
+  onBeforeConnectionClosed(handler: BeforeCloseHandlerFn): void {
+    this.beforeCloseHandlers.push(handler);
   }
 
-  removeConnectionClosedHandler(handler: CloseHandlerFn) {
-    const idx = this.closeHandlers.indexOf(handler);
+  removeBeforeConnectionClosedHandler(handler: BeforeCloseHandlerFn): void {
+    const idx = this.beforeCloseHandlers.indexOf(handler);
     if (idx < 0) return;
 
-    this.closeHandlers.splice(idx, 1);
+    this.beforeCloseHandlers.splice(idx, 1);
+  }
+
+  onAfterConnectionClosed(handler: AfterCloseHandlerFn) {
+    this.afterCloseHandlers.push(handler);
+  }
+
+  removeAfterConnectionClosedHandler(handler: AfterCloseHandlerFn) {
+    const idx = this.afterCloseHandlers.indexOf(handler);
+    if (idx < 0) return;
+
+    this.afterCloseHandlers.splice(idx, 1);
   }
 
   isActive(): this is { peer: P; peerOrigin: string } {
@@ -225,16 +244,16 @@ export class ICRC35Connection<P extends IPeer, L extends IListener> implements I
     }, ICRC35_PING_TIMEOUT_MS);
   }
 
-  private handleConnectionClosed(reason: "closed by peer" | "timed out" | "closed by this") {
+  private handleConnectionClosed(reason: ConnectionClosedReason) {
     this._peer = null;
     this.listener.removeEventListener("message", this.listen);
     this.msgHandlers = [];
 
-    for (let closeHandler of this.closeHandlers) {
-      closeHandler(reason);
+    for (let afterCloseHandler of this.afterCloseHandlers) {
+      afterCloseHandler(reason);
     }
 
-    this.closeHandlers = [];
+    this.afterCloseHandlers = [];
   }
 
   private handlePing() {

@@ -11,7 +11,7 @@ export type {
   IPeer,
   IListener,
   HandlerFn,
-  CloseHandlerFn,
+  AfterCloseHandlerFn as CloseHandlerFn,
 } from "./types";
 export { openICRC35Window } from "./utils";
 

@@ -1,4 +1,4 @@
-import { IICRC35Connection, CloseHandlerFn, HandlerFn } from "../types";
+import { IICRC35Connection, AfterCloseHandlerFn, HandlerFn, BeforeCloseHandlerFn } from "../types";
 import { ICRC35Plugin } from "./plugin";
 
 export class ICRC35ConnectionPlugin extends ICRC35Plugin<"ICRC35Connection"> implements IICRC35Connection {
@@ -32,12 +32,20 @@ export class ICRC35ConnectionPlugin extends ICRC35Plugin<"ICRC35Connection"> imp
     this.connection.close();
   }
 
-  onConnectionClosed(handler: CloseHandlerFn): void {
-    this.connection.onConnectionClosed(handler);
+  onBeforeConnectionClosed(handler: BeforeCloseHandlerFn): void {
+    this.connection.onBeforeConnectionClosed(handler);
   }
 
-  removeConnectionClosedHandler(handler: CloseHandlerFn): void {
-    this.connection.removeConnectionClosedHandler(handler);
+  removeBeforeConnectionClosedHandler(handler: BeforeCloseHandlerFn): void {
+    this.connection.removeBeforeConnectionClosedHandler(handler);
+  }
+
+  onAfterConnectionClosed(handler: AfterCloseHandlerFn): void {
+    this.connection.onAfterConnectionClosed(handler);
+  }
+
+  removeAfterConnectionClosedHandler(handler: AfterCloseHandlerFn): void {
+    this.connection.removeAfterConnectionClosedHandler(handler);
   }
 
   isActive(): boolean {

@@ -6,6 +6,7 @@ import { ErrorCode, ICRC35Error, delay } from "../utils";
 export class ICRC35AsyncPlugin extends ICRC35Plugin<"ICRC35Async"> {
   private sentRequests: Record<TRequestId, [ResolveFn<any>, RejectFn]> = {};
   private receivedRequests: ICRC35AsyncRequest<any>[] = [];
+  private requestsInProcess: TRequestId[] = [];
 
   getName(): "ICRC35Async" {
     return "ICRC35Async";
@@ -48,7 +49,7 @@ export class ICRC35AsyncPlugin extends ICRC35Plugin<"ICRC35Async"> {
       }
     });
 
-    this.base.plugins.ICRC35Connection.onConnectionClosed((reason) => {
+    this.base.plugins.ICRC35Connection.onAfterConnectionClosed((reason) => {
       Object.values(this.sentRequests).forEach(([_, reject]) =>
         reject(new ICRC35Error(ErrorCode.INVALID_STATE, `connection ${reason}`))
       );
@@ -58,12 +59,21 @@ export class ICRC35AsyncPlugin extends ICRC35Plugin<"ICRC35Async"> {
   }
 
   tryNext<R extends unknown>(allowedRoutes?: TRoute[]): ICRC35AsyncRequest<R> | undefined {
-    if (allowedRoutes === undefined) return this.receivedRequests.shift();
+    if (allowedRoutes === undefined) {
+      const req = this.receivedRequests.shift();
+
+      if (req) this.requestsInProcess.push(req.requestId);
+
+      return req;
+    }
 
     const idx = this.receivedRequests.findIndex((it) => allowedRoutes.includes(it.route));
     if (idx < 0) return undefined;
 
-    return this.receivedRequests.splice(idx, 1)[0];
+    const req = this.receivedRequests.splice(idx, 1)[0];
+    this.requestsInProcess.push(req.requestId);
+
+    return req;
   }
 
   async next<R extends unknown>(allowedRoutes?: TRoute[], delayMs: number = 50): Promise<ICRC35AsyncRequest<R>> {
@@ -101,6 +111,11 @@ export class ICRC35AsyncPlugin extends ICRC35Plugin<"ICRC35Async"> {
   }
 
   respond<T extends unknown>(requestId: TRequestId, response: T, transfer?: Transferable[]) {
+    const idx = this.requestsInProcess.indexOf(requestId);
+    if (idx < 0) return;
+
+    this.requestsInProcess.splice(idx, 1);
+
     const msg: IAsyncMsg = {
       domain: "icrc-35-async-plugin",
       kind: "response",
@@ -118,13 +133,15 @@ export class ICRC35AsyncPlugin extends ICRC35Plugin<"ICRC35Async"> {
 }
 export class ICRC35AsyncRequest<T extends unknown> {
   private plugin: ICRC35AsyncPlugin;
-  private requestId: TRequestId;
+  private inProgress: boolean;
+  public readonly requestId: TRequestId;
   public readonly peerOrigin: TOrigin;
   public readonly route: TRoute;
   public readonly body: T;
 
   constructor(init: { plugin: ICRC35AsyncPlugin; requestId: TRequestId; peerOrigin: TOrigin; route: TRoute; body: T }) {
     this.plugin = init.plugin;
+    this.inProgress = true;
     this.requestId = init.requestId;
     this.peerOrigin = init.peerOrigin;
     this.route = init.route;
@@ -132,6 +149,9 @@ export class ICRC35AsyncRequest<T extends unknown> {
   }
 
   respond<T extends unknown>(response: T, transfer?: Transferable[]) {
+    if (!this.inProgress) return;
+    this.inProgress = false;
+
     this.plugin.respond(this.requestId, response, transfer);
   }
 

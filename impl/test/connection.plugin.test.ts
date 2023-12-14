@@ -14,7 +14,9 @@ describe("icrc35 connection", () => {
     expect(endpointB.plugins.ICRC35Connection.peerOrigin).toBe(originA);
 
     const p = new Promise<void>((res, rej) => {
-      endpointA.plugins.ICRC35Connection.onConnectionClosed((reason) => (reason === "closed by peer" ? res() : rej()));
+      endpointA.plugins.ICRC35Connection.onAfterConnectionClosed((reason) =>
+        reason === "closed by peer" ? res() : rej()
+      );
     });
 
     endpointB.plugins.ICRC35Connection.close();
@@ -28,7 +30,9 @@ describe("icrc35 connection", () => {
     await delay(1000 * 10);
 
     const p = new Promise<void>((res, rej) => {
-      endpointA.plugins.ICRC35Connection.onConnectionClosed((reason) => (reason === "closed by peer" ? res() : rej()));
+      endpointA.plugins.ICRC35Connection.onAfterConnectionClosed((reason) =>
+        reason === "closed by peer" ? res() : rej()
+      );
     });
 
     endpointB.plugins.ICRC35Connection.close();
@@ -40,11 +44,11 @@ describe("icrc35 connection", () => {
     const [endpointA, endpointB] = await make({ breakConnectionAfterHandshake: true });
 
     const pA = new Promise<void>((res, rej) => {
-      endpointA.plugins.ICRC35Connection.onConnectionClosed((reason) => (reason === "timed out" ? res() : rej()));
+      endpointA.plugins.ICRC35Connection.onAfterConnectionClosed((reason) => (reason === "timed out" ? res() : rej()));
     });
 
     const pB = new Promise<void>((res, rej) => {
-      endpointB.plugins.ICRC35Connection.onConnectionClosed((reason) => (reason === "timed out" ? res() : rej()));
+      endpointB.plugins.ICRC35Connection.onAfterConnectionClosed((reason) => (reason === "timed out" ? res() : rej()));
     });
 
     await Promise.all([pA, pB]);
@@ -134,7 +138,9 @@ describe("icrc35 connection", () => {
     }
 
     const p = new Promise<void>((res, rej) => {
-      endpointA.plugins.ICRC35Connection.onConnectionClosed((reason) => (reason === "closed by peer" ? res() : rej()));
+      endpointA.plugins.ICRC35Connection.onAfterConnectionClosed((reason) =>
+        reason === "closed by peer" ? res() : rej()
+      );
     });
 
     endpointB.plugins.ICRC35Connection.close();
