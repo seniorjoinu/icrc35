@@ -15,6 +15,6 @@
   },
   "dependencies": {
     "icrc-35": "workspace:*",
-    "example-icrc35-plugin": "workspace:*"
+    "example-icrc35-client-library": "workspace:*"
   }
 }

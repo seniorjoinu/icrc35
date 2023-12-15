@@ -6,7 +6,7 @@ import {
   ICRC35ConnectionChildConfig,
   ICRC35ConnectionParentConfig,
   IConnectionClosedMsg,
-  ICustomMsg,
+  ICommonMsg,
   IEndpointChildMode,
   IEndpointParentMode,
   IHandshakeCompleteMsg,
@@ -20,7 +20,7 @@ import {
   ResolveFn,
   TOrigin,
   ZConnectionClosedMsg,
-  ZCustomMsg,
+  ZCommonMsg,
   ZEndpointChildMode,
   ZEndpointParentMode,
   ZHandshakeCompleteMsg,
@@ -29,6 +29,14 @@ import {
   ZMsg,
   ZPingMsg,
   ZPongMsg,
+  IRequestMsg,
+  IResposeMsg,
+  ZRequestMsg,
+  ZResponseMsg,
+  TRequestId,
+  TRoute,
+  ZRoute,
+  ICRC35AsyncRequest,
 } from "./types";
 import {
   ErrorCode,
@@ -38,6 +46,7 @@ import {
   isEqualUint8Arr,
   defaultListener,
   log,
+  delay,
 } from "./utils";
 import { DEFAULT_DEBUG, ICRC35_CONNECTION_TIMEOUT_MS, ICRC35_PING_TIMEOUT_MS } from "./consts";
 
@@ -47,9 +56,14 @@ export class ICRC35Connection<P extends IPeer, L extends IListener> implements I
   private _listener: L;
   private mode: IEndpointChildMode | IEndpointParentMode;
   private lastReceivedMsgTimestamp: number = 0;
-  private msgHandlers: HandlerFn[] = [];
+  private commonMsgHandlers: HandlerFn[] = [];
   private beforeCloseHandlers: BeforeCloseHandlerFn[] = [];
   private afterCloseHandlers: AfterCloseHandlerFn[] = [];
+
+  private sentRequests: Record<TRequestId, [ResolveFn<any>, RejectFn]> = {};
+  private receivedRequests: ICRC35AsyncRequest<any>[] = [];
+  private requestsInProcess: TRequestId[] = [];
+
   private debug: boolean;
 
   static async establish<P extends IPeer, L extends IListener>(
@@ -71,31 +85,25 @@ export class ICRC35Connection<P extends IPeer, L extends IListener> implements I
     return it;
   }
 
-  sendMessage(msg: any, transfer?: Transferable[]) {
-    if (!this.isActive()) throw new ICRC35Error(ErrorCode.INVALID_STATE, "Connection closed");
-
-    const _msg: ICustomMsg = {
+  sendCommonMessage(msg: any, transfer?: Transferable[]) {
+    const _msg: ICommonMsg = {
       domain: "icrc-35",
-      kind: "Custom",
+      kind: "Common",
       payload: msg,
     };
 
-    this._peer!.postMessage(_msg, this._peerOrigin!, transfer);
-
-    if (this.debug) {
-      log(this.listener.origin, "sent message", msg, "to", this._peerOrigin);
-    }
+    this.send(_msg, transfer);
   }
 
-  onMessage(handler: HandlerFn) {
-    this.msgHandlers.push(handler);
+  onCommonMessage(handler: HandlerFn) {
+    this.commonMsgHandlers.push(handler);
   }
 
-  removeMessageHandler(handler: HandlerFn) {
-    const idx = this.msgHandlers.indexOf(handler);
+  removeCommonMessageHandler(handler: HandlerFn) {
+    const idx = this.commonMsgHandlers.indexOf(handler);
     if (idx < 0) return;
 
-    this.msgHandlers.splice(idx, 1);
+    this.commonMsgHandlers.splice(idx, 1);
   }
 
   close() {
@@ -110,11 +118,8 @@ export class ICRC35Connection<P extends IPeer, L extends IListener> implements I
       domain: "icrc-35",
       kind: "ConnectionClosed",
     };
-    this.peer.postMessage(msg, this.peerOrigin!);
 
-    if (this.debug) {
-      log(this.listener.origin, "sent message", msg, "from", this.peerOrigin);
-    }
+    this.send(msg);
 
     this.handleConnectionClosed("closed by this");
   }
@@ -141,6 +146,71 @@ export class ICRC35Connection<P extends IPeer, L extends IListener> implements I
     this.afterCloseHandlers.splice(idx, 1);
   }
 
+  async request<T extends unknown, R extends unknown>(
+    route: TRoute,
+    request: T,
+    transfer?: Transferable[]
+  ): Promise<R> {
+    const msg: IRequestMsg = {
+      domain: "icrc-35",
+      kind: "Request",
+      route,
+      requestId: crypto.randomUUID(),
+      payload: request,
+    };
+
+    return new Promise<R>((resolve, reject) => {
+      this.send(msg, transfer);
+      this.sentRequests[msg.requestId] = [resolve, reject];
+    });
+  }
+
+  respond<T extends unknown>(requestId: TRequestId, response: T, transfer?: Transferable[]) {
+    const idx = this.requestsInProcess.indexOf(requestId);
+    if (idx < 0) return;
+
+    this.requestsInProcess.splice(idx, 1);
+
+    const msg: IResposeMsg = {
+      domain: "icrc-35",
+      kind: "Response",
+      requestId,
+      payload: response,
+    };
+
+    this.send(msg, transfer);
+  }
+
+  tryNextRequest<R extends unknown>(allowedRoutes?: TRoute[]): ICRC35AsyncRequest<R> | undefined {
+    if (allowedRoutes === undefined) {
+      const req = this.receivedRequests.shift();
+
+      if (req) this.requestsInProcess.push(req.requestId);
+
+      return req;
+    }
+
+    const idx = this.receivedRequests.findIndex((it) => allowedRoutes.includes(it.route));
+    if (idx < 0) return undefined;
+
+    const req = this.receivedRequests.splice(idx, 1)[0];
+    this.requestsInProcess.push(req.requestId);
+
+    return req;
+  }
+
+  async nextRequest<R extends unknown>(allowedRoutes?: TRoute[], delayMs: number = 50): Promise<ICRC35AsyncRequest<R>> {
+    while (this.isActive()) {
+      const req = this.tryNextRequest(allowedRoutes);
+
+      if (req) return req as ICRC35AsyncRequest<R>;
+
+      await delay(delayMs);
+    }
+
+    throw new ICRC35Error(ErrorCode.INVALID_STATE, "The connection is already closed");
+  }
+
   isActive(): this is { peer: P; peerOrigin: string } {
     return this._peer !== null && this._peerOrigin !== null;
   }
@@ -155,6 +225,16 @@ export class ICRC35Connection<P extends IPeer, L extends IListener> implements I
 
   get listener() {
     return this._listener;
+  }
+
+  private send(msg: any, transfer?: Transferable[]) {
+    if (!this.isActive()) throw new ICRC35Error(ErrorCode.INVALID_STATE, "Connection closed");
+
+    this._peer!.postMessage(msg, this._peerOrigin!, transfer);
+
+    if (this.debug) {
+      log(this.listener.origin, "sent message", msg, "to", this._peerOrigin);
+    }
   }
 
   private listen = (ev: MessageEvent<any>) => {
@@ -195,11 +275,25 @@ export class ICRC35Connection<P extends IPeer, L extends IListener> implements I
         this.handlePong();
         return;
       }
-      case "Custom": {
-        const r = ZCustomMsg.safeParse(res.data);
+      case "Common": {
+        const r = ZCommonMsg.safeParse(res.data);
         if (!r.success) return;
 
-        this.handleCustom(res.data.payload);
+        this.handleCommon(r.data.payload);
+        return;
+      }
+      case "Request": {
+        const r = ZRequestMsg.safeParse(res.data);
+        if (!r.success) return;
+
+        this.handleRequest(r.data);
+        return;
+      }
+      case "Response": {
+        const r = ZResponseMsg.safeParse(res.data);
+        if (!r.success) return;
+
+        this.handleResponse(r.data);
         return;
       }
 
@@ -208,6 +302,32 @@ export class ICRC35Connection<P extends IPeer, L extends IListener> implements I
         return;
     }
   };
+
+  private handleRequest(msg: IRequestMsg) {
+    const route = ZRoute.parse(msg.route);
+
+    const request = new ICRC35AsyncRequest({
+      connection: this as IICRC35Connection,
+      requestId: msg.requestId,
+      peerOrigin: this.peerOrigin!,
+      route: route,
+      payload: msg.payload,
+    });
+
+    this.receivedRequests.push(request);
+  }
+
+  private handleResponse(msg: IResposeMsg) {
+    // ignore responses for non-existing requests
+    if (!(msg.requestId in this.sentRequests)) {
+      return;
+    }
+
+    const [resolve, _] = this.sentRequests[msg.requestId];
+    resolve(msg.payload);
+
+    delete this.sentRequests[msg.requestId];
+  }
 
   // this function will check the last interaction time
   // if this time was more than the <ping timeout> seconds ago, it will send a ping message, to which the other side should respond with pong
@@ -233,11 +353,7 @@ export class ICRC35Connection<P extends IPeer, L extends IListener> implements I
           kind: "Ping",
         };
 
-        this._peer!.postMessage(msg, this.peerOrigin!);
-
-        if (this.debug) {
-          log(this.listener.origin, "sent message", msg, "to", this.peerOrigin);
-        }
+        this.send(msg);
 
         return;
       }
@@ -247,7 +363,13 @@ export class ICRC35Connection<P extends IPeer, L extends IListener> implements I
   private handleConnectionClosed(reason: ConnectionClosedReason) {
     this._peer = null;
     this.listener.removeEventListener("message", this.listen);
-    this.msgHandlers = [];
+    this.commonMsgHandlers = [];
+
+    Object.values(this.sentRequests).forEach(([_, reject]) =>
+      reject(new ICRC35Error(ErrorCode.INVALID_STATE, `connection ${reason}`))
+    );
+
+    this.sentRequests = {};
 
     for (let afterCloseHandler of this.afterCloseHandlers) {
       afterCloseHandler(reason);
@@ -264,22 +386,18 @@ export class ICRC35Connection<P extends IPeer, L extends IListener> implements I
       kind: "Pong",
     };
 
-    this._peer!.postMessage(msg, this.peerOrigin!);
-
-    if (this.debug) {
-      log(this.listener.origin, "sent message", msg, "from", this.peerOrigin);
-    }
+    this.send(msg);
   }
 
   private handlePong() {
     this.updateTimestamp();
   }
 
-  private handleCustom(data: any) {
+  private handleCommon(data: any) {
     this.updateTimestamp();
 
-    for (let handler of this.msgHandlers) {
-      handler(data);
+    for (let commonMsgHandler of this.commonMsgHandlers) {
+      commonMsgHandler(data);
     }
   }
 
@@ -385,21 +503,18 @@ export class ICRC35Connection<P extends IPeer, L extends IListener> implements I
         log(this.listener.origin, "received message", ev.data, "from", ev.origin);
       }
 
+      this.updateTimestamp();
+
       const msg: IHandshakeCompleteMsg = {
         domain: "icrc-35",
         kind: "HandshakeComplete",
         secret: res.data.secret,
       };
 
+      this.send(msg);
+
       if (this.debug) {
         log(this.listener.origin, `parent-level handshake complete, peer origin = ${this._peerOrigin}`);
-      }
-
-      this.updateTimestamp();
-      this._peer!.postMessage(msg, this._peerOrigin!);
-
-      if (this.debug) {
-        log(this.listener.origin, "sent message", msg, "to", this._peerOrigin);
       }
 
       this.listener.removeEventListener("message", handler);

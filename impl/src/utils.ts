@@ -1,8 +1,5 @@
-import { ICRC35Connection } from "./connection";
 import { ICRC35_SECRET_SIZE } from "./consts";
-import { ICRC35AsyncPlugin } from "./plugins/async.plugin";
-import { ICRC35ConnectionPlugin } from "./plugins/connection.plugin";
-import { IConnectionFilter, IListener, IPeer } from "./types";
+import { IConnectionFilter, IListener } from "./types";
 
 export function generateSecret(): Uint8Array {
   const res = new Uint8Array(ICRC35_SECRET_SIZE);

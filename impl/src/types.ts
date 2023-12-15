@@ -3,7 +3,16 @@ import { ICRC35_SECRET_SIZE } from "./consts";
 
 // ------------ PROTOCOL TYPES START --------------
 
-export const ZMsgKind = z.enum(["HandshakeInit", "HandshakeComplete", "Ping", "Pong", "ConnectionClosed", "Custom"]);
+export const ZMsgKind = z.enum([
+  "HandshakeInit",
+  "HandshakeComplete",
+  "Ping",
+  "Pong",
+  "ConnectionClosed",
+  "Common",
+  "Request",
+  "Response",
+]);
 export const ZSecret = z.custom<Uint8Array>((val) => val instanceof Uint8Array && val.length == ICRC35_SECRET_SIZE);
 
 export const ZICRC35Base = z.object({
@@ -30,8 +39,24 @@ export const ZConnectionClosedMsg = ZICRC35Base.extend({
   kind: z.literal(ZMsgKind.Enum.ConnectionClosed),
 }).strict();
 
-export const ZCustomMsg = ZICRC35Base.extend({
-  kind: z.literal(ZMsgKind.Enum.Custom),
+export const ZCommonMsg = ZICRC35Base.extend({
+  kind: z.literal(ZMsgKind.Enum.Common),
+  payload: z.any(),
+});
+
+export const ZRequestId = z.string().uuid();
+export const ZRoute = z.string().url();
+
+export const ZRequestMsg = ZICRC35Base.extend({
+  kind: z.literal(ZMsgKind.Enum.Request),
+  requestId: ZRequestId,
+  route: ZRoute,
+  payload: z.any(),
+});
+
+export const ZResponseMsg = ZICRC35Base.extend({
+  kind: z.literal(ZMsgKind.Enum.Response),
+  requestId: ZRequestId,
   payload: z.any(),
 });
 
@@ -41,7 +66,9 @@ export const ZMsg = z.discriminatedUnion("kind", [
   ZPingMsg,
   ZPongMsg,
   ZConnectionClosedMsg,
-  ZCustomMsg,
+  ZCommonMsg,
+  ZRequestMsg,
+  ZResponseMsg,
 ]);
 
 export type EMsgKind = z.infer<typeof ZMsgKind>;
@@ -55,7 +82,11 @@ export type IPingMsg = z.infer<typeof ZPingMsg>;
 
 export type IConnectionClosedMsg = z.infer<typeof ZConnectionClosedMsg>;
 
-export type ICustomMsg = z.infer<typeof ZCustomMsg>;
+export type TRequestId = z.infer<typeof ZRequestId>;
+export type TRoute = z.infer<typeof ZRoute>;
+export type ICommonMsg = z.infer<typeof ZCommonMsg>;
+export type IRequestMsg = z.infer<typeof ZRequestMsg>;
+export type IResposeMsg = z.infer<typeof ZResponseMsg>;
 
 export type IMsg = z.infer<typeof ZMsg>;
 
@@ -152,15 +183,54 @@ export type BeforeCloseHandlerFn = () => void;
 
 export interface IICRC35Connection {
   readonly peerOrigin: TOrigin;
-  sendMessage(msg: any, transfer?: Transferable[]): void;
-  onMessage(handler: HandlerFn): void;
-  removeMessageHandler(handler: HandlerFn): void;
+  sendCommonMessage(msg: any, transfer?: Transferable[]): void;
+  onCommonMessage(handler: HandlerFn): void;
+  removeCommonMessageHandler(handler: HandlerFn): void;
   close(): void;
   onBeforeConnectionClosed(handler: BeforeCloseHandlerFn): void;
   removeBeforeConnectionClosedHandler(handler: BeforeCloseHandlerFn): void;
   onAfterConnectionClosed(handler: AfterCloseHandlerFn): void;
   removeAfterConnectionClosedHandler(handler: AfterCloseHandlerFn): void;
+  request<T extends unknown, R extends unknown>(route: TRoute, request: T, transfer?: Transferable[]): Promise<R>;
+  respond<T extends unknown>(requestId: TRequestId, response: T, transfer?: Transferable[]): void;
+  tryNextRequest<R extends unknown>(allowedRoutes?: TRoute[]): ICRC35AsyncRequest<R> | undefined;
+  nextRequest<R extends unknown>(allowedRoutes?: TRoute[], delayMs?: number): Promise<ICRC35AsyncRequest<R>>;
   isActive(): boolean;
+}
+
+export class ICRC35AsyncRequest<T extends unknown> {
+  private connection: IICRC35Connection;
+  private inProgress: boolean;
+  public readonly requestId: TRequestId;
+  public readonly peerOrigin: TOrigin;
+  public readonly route: TRoute;
+  public readonly payload: T;
+
+  constructor(init: {
+    connection: IICRC35Connection;
+    requestId: TRequestId;
+    peerOrigin: TOrigin;
+    route: TRoute;
+    payload: T;
+  }) {
+    this.connection = init.connection;
+    this.inProgress = true;
+    this.requestId = init.requestId;
+    this.peerOrigin = init.peerOrigin;
+    this.route = init.route;
+    this.payload = init.payload;
+  }
+
+  respond<T extends unknown>(response: T, transfer?: Transferable[]) {
+    if (!this.inProgress) return;
+    this.inProgress = false;
+
+    this.connection.respond(this.requestId, response, transfer);
+  }
+
+  closeConnection() {
+    this.connection.close();
+  }
 }
 
 // ------------- ADDITIONAL TYPES END --------------

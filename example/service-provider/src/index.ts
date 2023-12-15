@@ -1,5 +1,5 @@
-import { ExamplePlugin } from "example-icrc35-plugin";
-import { ICRC35, ICRC35Connection } from "icrc-35";
+import { ExampleClient, GreetRoute, ISharedRequest, ISharedResponse } from "example-icrc35-client-library";
+import { ICRC35Connection } from "icrc-35";
 
 if (window.location.pathname !== "/icrc35") {
   alert("Wrong ICRC-35 path: go to /icrc35");
@@ -21,27 +21,20 @@ window.addEventListener("load", async () => {
     debug: true,
   });
 
-  // the receiver side does not need to enable the plugin, if it only receives requests and responds to them, without sending requests itself
-  const icrc35 = new ICRC35(connection);
-
   // wait for a request from peer
-  let greetRequest = await icrc35.plugins.ICRC35Async.next([ExamplePlugin.GreetRoute]);
+  let greetRequest = await connection.nextRequest([GreetRoute]);
 
   // validate inputs
-  const name = greetRequest.body as string;
-
-  if (typeof name !== "string") {
-    throw new Error(`Invalid request body, expected string`);
+  const body = greetRequest.payload as ISharedRequest;
+  if (typeof body !== "object" || !body.name || typeof body.name !== "string") {
+    throw new Error("Invalid request");
   }
 
   // calculate output and respond
-  const greeting = `Hello, ${name}`;
-
+  const greeting: ISharedResponse = { result: `Hello, ${body.name}` };
   greetRequest.respond(greeting);
 
   // close the connection and the window
-  setTimeout(() => {
-    icrc35.plugins.ICRC35Connection.close();
-    window.close();
-  }, 100);
+  connection.close();
+  window.close();
 });

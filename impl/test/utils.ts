@@ -1,3 +1,4 @@
+import { ICRC35Connection } from "../src";
 import { IListener, IPeer } from "../src/types";
 
 export const originA = "https://a.com";
@@ -70,4 +71,37 @@ export class TestMsgPipe implements IPeer, IListener {
       }
     }, 10);
   }
+}
+
+export async function make(config?: { breakConnectionAfterHandshake: boolean }) {
+  const pipeAB = new TestMsgPipe(originA, originB);
+  const pipeBA = new TestMsgPipe(originB, originA);
+
+  const connectionAP = ICRC35Connection.establish({
+    peer: pipeBA,
+    peerOrigin: originB,
+    listener: pipeAB,
+    mode: "parent",
+    debug: true,
+  });
+
+  const connectionB = await ICRC35Connection.establish({
+    peer: pipeAB,
+    listener: pipeBA,
+    mode: "child",
+    connectionFilter: {
+      kind: "blacklist",
+      list: [],
+    },
+    debug: true,
+  });
+
+  const connectionA = await connectionAP;
+
+  if (config?.breakConnectionAfterHandshake) {
+    pipeAB.break();
+    pipeBA.break();
+  }
+
+  return [connectionA, connectionB];
 }

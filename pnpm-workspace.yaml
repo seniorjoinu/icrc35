@@ -1,5 +1,5 @@
 packages:
   - "impl"
-  - "example/plugin"
+  - "example/client"
   - "example/service-provider"
   - "example/service-consumer"

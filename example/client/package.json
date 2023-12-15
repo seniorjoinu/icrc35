@@ -1,5 +1,5 @@
 {
-  "name": "example-icrc35-plugin",
+  "name": "example-icrc35-client-library",
   "version": "0.1.0",
   "module": "./dist/esm/index",
   "types": "./dist/esm/index.d.ts",
