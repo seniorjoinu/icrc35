@@ -1,6 +1,6 @@
 {
   "name": "icrc-35",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "A reference implementation of ICRC-35 browser-based integration framework",
   "main": "./dist/cjs/index",
   "module": "./dist/esm/index",

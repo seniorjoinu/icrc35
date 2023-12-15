@@ -1,4 +1,4 @@
-import { ExampleClient, GreetRoute, ISharedRequest, ISharedResponse } from "example-icrc35-client-library";
+import { ExampleClient, ISharedRequest, ISharedResponse } from "example-icrc35-client-library";
 import { ICRC35Connection } from "icrc-35";
 
 if (window.location.pathname !== "/icrc35") {
@@ -20,9 +20,10 @@ window.addEventListener("load", async () => {
     peer: window.opener,
     debug: true,
   });
+  const client = new ExampleClient(connection);
 
   // wait for a request from peer
-  let greetRequest = await connection.nextRequest([GreetRoute]);
+  let greetRequest = await client.nextGreetRequest();
 
   // validate inputs
   const body = greetRequest.payload as ISharedRequest;

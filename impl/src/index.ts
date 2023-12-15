@@ -9,3 +9,4 @@ export type {
   AfterCloseHandlerFn as CloseHandlerFn,
 } from "./types";
 export { openICRC35Window } from "./utils";
+export { ICRC35AsyncRequest } from "./types";
