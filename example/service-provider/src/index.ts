@@ -1,5 +1,6 @@
 import { ExampleClient, ISharedRequest, ISharedResponse } from "example-icrc35-client-library";
 import { ICRC35Connection } from "icrc-35";
+import { generateDefaultFilter } from "icrc-35/dist/esm/utils";
 
 if (window.location.pathname !== "/icrc35") {
   alert("Wrong ICRC-35 path: go to /icrc35");
@@ -13,10 +14,7 @@ window.addEventListener("load", async () => {
   // establish ICRC-35 connection
   const connection = await ICRC35Connection.establish({
     mode: "child",
-    connectionFilter: {
-      kind: "blacklist",
-      list: [],
-    },
+    connectionFilter: generateDefaultFilter(),
     peer: window.opener,
     debug: true,
   });

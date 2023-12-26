@@ -50,6 +50,9 @@ import {
 } from "./utils";
 import { DEFAULT_DEBUG, ICRC35_CONNECTION_TIMEOUT_MS, ICRC35_PING_TIMEOUT_MS } from "./consts";
 
+/**
+ * ICRC35 Connection that is established between peers in order to exchange messages.
+ */
 export class ICRC35Connection<P extends IPeer, L extends IListener> implements IICRC35Connection {
   private _peer: P | null = null;
   private _peerOrigin: TOrigin | null = null;
@@ -66,6 +69,11 @@ export class ICRC35Connection<P extends IPeer, L extends IListener> implements I
 
   private debug: boolean;
 
+  /**
+   * Creates a connection and starts the Handshake Phase.
+   * The returned Promise is resolved when the Handshake Phase is over
+   * and the connection is ready to send and receive messages.
+   */
   static async establish<P extends IPeer, L extends IListener>(
     config: ICRC35ConnectionChildConfig<P, L> | ICRC35ConnectionParentConfig<P, L>
   ): Promise<IICRC35Connection> {

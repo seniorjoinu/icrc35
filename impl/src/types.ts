@@ -157,19 +157,37 @@ export type EEndpointModeKind = z.infer<typeof ZEndpointModeKind>;
 export type IEndpointMode = z.infer<typeof ZEndpointMode>;
 
 interface ICRC35ConnectionConfig<P extends IPeer, L extends IListener> {
+  /**
+   * Remote peer window or iFrame object
+   */
   peer: P;
+  /**
+   * Self peer window object
+   */
   listener?: L;
+  /**
+   * Debug mode
+   */
   debug?: boolean;
+  /**
+   * 'parent' or 'child', depending on the side the connection is established from
+   */
   mode: EEndpointModeKind;
 }
 
 export interface ICRC35ConnectionChildConfig<P extends IPeer, L extends IListener>
   extends ICRC35ConnectionConfig<P, L> {
+  /**
+   * A filter that automatically filters out incoming connections
+   */
   connectionFilter: IConnectionFilter;
 }
 
 export interface ICRC35ConnectionParentConfig<P extends IPeer, L extends IListener>
   extends ICRC35ConnectionConfig<P, L> {
+  /**
+   * The origin of the child peer.
+   */
   peerOrigin: TOrigin;
 }
 
@@ -182,22 +200,74 @@ export type AfterCloseHandlerFn = (reason: ConnectionClosedReason) => void;
 export type BeforeCloseHandlerFn = () => void;
 
 export interface IICRC35Connection {
+  /**
+   * Origin of the remote peer.
+   */
   readonly peerOrigin: TOrigin;
+  /**
+   * Sends Common messages (fire-and-forget).
+   * Optionally accepts an array of Transferable objects for faster zero-copy transfer
+   */
   sendCommonMessage(msg: any, transfer?: Transferable[]): void;
+  /**
+   * Adds an event listener that triggers when a Common message received
+   */
   onCommonMessage(handler: HandlerFn): void;
+  /**
+   * Remove an event listener for Common messages
+   */
   removeCommonMessageHandler(handler: HandlerFn): void;
+  /**
+   * Close the connection explicitly
+   */
   close(): void;
+  /**
+   * Adds an event listener that triggers before the connection is closed.
+   * Handlers can still send messages.
+   */
   onBeforeConnectionClosed(handler: BeforeCloseHandlerFn): void;
+  /**
+   * Removes an event listener that triggers before the connection is closed.
+   */
   removeBeforeConnectionClosedHandler(handler: BeforeCloseHandlerFn): void;
+  /**
+   * Adds an event listener that triggers after the connection is closed.
+   * Handler can't send messages. Handler receives a reason-string as an argument.
+   */
   onAfterConnectionClosed(handler: AfterCloseHandlerFn): void;
+  /**
+   * Removes an event listener that triggers after the connection is closed.
+   */
   removeAfterConnectionClosedHandler(handler: AfterCloseHandlerFn): void;
+  /**
+   * Sends a Request message to the supplied Route.
+   * Optionally accepts an array of Transferable objects for faster zero-copy transfer
+   */
   request<T extends unknown, R extends unknown>(route: TRoute, request: T, transfer?: Transferable[]): Promise<R>;
+  /**
+   * Sends a Response message by the requestId.
+   * Optionally accepts an array of Transferable objects for faster zero-copy transfer
+   */
   respond<T extends unknown>(requestId: TRequestId, response: T, transfer?: Transferable[]): void;
+  /**
+   * Immediately returns a Request message, if there is any in the queue.
+   * Optionally accepts an array of Routes, that will only return a message if the array contains Request's Route
+   */
   tryNextRequest<R extends unknown>(allowedRoutes?: TRoute[]): ICRC35AsyncRequest<R> | undefined;
+  /**
+   * Suspends the execution until a Request message is present in the queue. Return a Promise.
+   * Optionally accepts an array of Routes, that will only return a message if the array contains Request's Route
+   */
   nextRequest<R extends unknown>(allowedRoutes?: TRoute[], delayMs?: number): Promise<ICRC35AsyncRequest<R>>;
+  /**
+   * Returns `true` if the connection is operational. Returns `false` if the connection is closed.
+   */
   isActive(): boolean;
 }
 
+/**
+ * Request object that simplifies decoupling of components.
+ */
 export class ICRC35AsyncRequest<T extends unknown> {
   private connection: IICRC35Connection;
   private inProgress: boolean;

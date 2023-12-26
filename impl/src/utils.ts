@@ -1,6 +1,9 @@
 import { ICRC35_SECRET_SIZE } from "./consts";
 import { IConnectionFilter, IListener } from "./types";
 
+/**
+ * Generates a random byte array of size 32
+ */
 export function generateSecret(): Uint8Array {
   const res = new Uint8Array(ICRC35_SECRET_SIZE);
   crypto.getRandomValues(res);
@@ -8,8 +11,10 @@ export function generateSecret(): Uint8Array {
   return res;
 }
 
-// the default is to deny all connections (empty whitelist)
-// if you need an "allow all" filter, set it to empty blacklist
+/**
+ * the default is to deny all connections (empty whitelist)
+ * if you need an "allow all" filter, set it to empty blacklist
+ */
 export function generateDefaultFilter(): IConnectionFilter {
   return {
     kind: "whitelist",
@@ -73,6 +78,10 @@ export function err(...args: any[]) {
   console.error(`[${makeTime()}]`, "<ICRC-35>", ...args);
 }
 
+/**
+ * Opens a new window at <origin> + '/icrc35' and does some assertions to make sure it was indeed opened.
+ * Throws an error otherwise.
+ */
 export function openICRC35Window(origin: string | URL): { peer: Window; peerOrigin: string } {
   // force it to be a URL
   if (!(origin instanceof URL)) {
