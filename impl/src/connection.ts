@@ -37,6 +37,7 @@ import {
   TRoute,
   ZRoute,
   ICRC35AsyncRequest,
+  RequestHandlerFn,
 } from "./types";
 import {
   ErrorCode,
@@ -64,8 +65,8 @@ export class ICRC35Connection<P extends IPeer, L extends IListener> implements I
   private afterCloseHandlers: AfterCloseHandlerFn[] = [];
 
   private sentRequests: Record<TRequestId, [ResolveFn<any>, RejectFn]> = {};
-  private receivedRequests: ICRC35AsyncRequest<any>[] = [];
   private requestsInProcess: TRequestId[] = [];
+  private requestHandlers: Record<TRoute, RequestHandlerFn<any>[]> = {};
 
   private debug: boolean;
 
@@ -189,34 +190,22 @@ export class ICRC35Connection<P extends IPeer, L extends IListener> implements I
     this.send(msg, transfer);
   }
 
-  tryNextRequest<R extends unknown>(allowedRoutes?: TRoute[]): ICRC35AsyncRequest<R> | undefined {
-    if (allowedRoutes === undefined) {
-      const req = this.receivedRequests.shift();
-
-      if (req) this.requestsInProcess.push(req.requestId);
-
-      return req;
+  onRequest<T>(route: string, handler: RequestHandlerFn<T>): void {
+    if (!this.requestHandlers[route]) {
+      this.requestHandlers[route] = [handler];
+      return;
     }
 
-    const idx = this.receivedRequests.findIndex((it) => allowedRoutes.includes(it.route));
-    if (idx < 0) return undefined;
-
-    const req = this.receivedRequests.splice(idx, 1)[0];
-    this.requestsInProcess.push(req.requestId);
-
-    return req;
+    this.requestHandlers[route].push(handler);
   }
 
-  async nextRequest<R extends unknown>(allowedRoutes?: TRoute[], delayMs: number = 50): Promise<ICRC35AsyncRequest<R>> {
-    while (this.isActive()) {
-      const req = this.tryNextRequest(allowedRoutes);
-
-      if (req) return req as ICRC35AsyncRequest<R>;
-
-      await delay(delayMs);
+  removeRequestHandler<T>(route: string, handler: RequestHandlerFn<T>): void {
+    if (!this.requestHandlers[route]) {
+      return;
     }
 
-    throw new ICRC35Error(ErrorCode.INVALID_STATE, "The connection is already closed");
+    const idx = this.requestHandlers[route].indexOf(handler);
+    this.requestHandlers[route].splice(idx, 1);
   }
 
   isActive(): this is { peer: P; peerOrigin: string } {
@@ -322,7 +311,16 @@ export class ICRC35Connection<P extends IPeer, L extends IListener> implements I
       payload: msg.payload,
     });
 
-    this.receivedRequests.push(request);
+    // ignore requests with no handler
+    if (!this.requestHandlers[route]) {
+      return;
+    }
+
+    this.requestsInProcess.push(request.requestId);
+
+    for (let handler of this.requestHandlers[route]) {
+      handler(request);
+    }
   }
 
   private handleResponse(msg: IResposeMsg) {
@@ -384,6 +382,7 @@ export class ICRC35Connection<P extends IPeer, L extends IListener> implements I
     }
 
     this.afterCloseHandlers = [];
+    this.requestHandlers = {};
   }
 
   private handlePing() {

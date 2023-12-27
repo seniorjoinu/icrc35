@@ -1,12 +1,12 @@
-import { ICRC35AsyncRequest, IICRC35Connection } from "icrc-35";
+import { IICRC35Connection } from "icrc-35";
+
+export const GREET_ROUTE = "example:greet";
 
 export class ExampleClient {
-  static GreetRoute = "example:greet";
-
   constructor(private connection: IICRC35Connection) {}
 
   async greet(name: string): Promise<ISharedResponse> {
-    const res = await this.connection.request(ExampleClient.GreetRoute, { name });
+    const res = await this.connection.request(GREET_ROUTE, { name });
 
     if (
       typeof res === "object" &&
@@ -17,14 +17,6 @@ export class ExampleClient {
     }
 
     throw new Error("Invalid response");
-  }
-}
-
-export class ExampleServer {
-  constructor(private connection: IICRC35Connection) {}
-
-  async nextGreetRequest(): Promise<ICRC35AsyncRequest<ISharedRequest>> {
-    return this.connection.nextRequest([ExampleClient.GreetRoute]);
   }
 }
 

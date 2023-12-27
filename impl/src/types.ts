@@ -198,6 +198,7 @@ export type HandlerFn = (msg: any) => void;
 export type ConnectionClosedReason = "closed by this" | "closed by peer" | "timed out";
 export type AfterCloseHandlerFn = (reason: ConnectionClosedReason) => void;
 export type BeforeCloseHandlerFn = () => void;
+export type RequestHandlerFn<T> = (request: ICRC35AsyncRequest<T>) => void;
 
 export interface IICRC35Connection {
   /**
@@ -250,15 +251,13 @@ export interface IICRC35Connection {
    */
   respond<T extends unknown>(requestId: TRequestId, response: T, transfer?: Transferable[]): void;
   /**
-   * Immediately returns a Request message, if there is any in the queue.
-   * Optionally accepts an array of Routes, that will only return a message if the array contains Request's Route
+   * Adds an event listener that triggers after a Request message of a specified route is received.
    */
-  tryNextRequest<R extends unknown>(allowedRoutes?: TRoute[]): ICRC35AsyncRequest<R> | undefined;
+  onRequest<T>(route: TRoute, handler: RequestHandlerFn<T>): void;
   /**
-   * Suspends the execution until a Request message is present in the queue. Return a Promise.
-   * Optionally accepts an array of Routes, that will only return a message if the array contains Request's Route
+   *  Removes an event listener that triggers after a Request message of a specified route is received.
    */
-  nextRequest<R extends unknown>(allowedRoutes?: TRoute[], delayMs?: number): Promise<ICRC35AsyncRequest<R>>;
+  removeRequestHandler<T>(route: TRoute, handler: RequestHandlerFn<T>): void;
   /**
    * Returns `true` if the connection is operational. Returns `false` if the connection is closed.
    */

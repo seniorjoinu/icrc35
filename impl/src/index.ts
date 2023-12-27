@@ -8,5 +8,5 @@ export type {
   HandlerFn,
   AfterCloseHandlerFn as CloseHandlerFn,
 } from "./types";
-export { openICRC35Window } from "./utils";
+export { openICRC35Window, generateDefaultFilter } from "./utils";
 export { ICRC35AsyncRequest } from "./types";

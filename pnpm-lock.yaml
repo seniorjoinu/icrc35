@@ -12,17 +12,11 @@ importers:
         specifier: ^5.3.3
         version: 5.3.3
 
-  example/client:
-    dependencies:
-      icrc-35:
-        specifier: workspace:*
-        version: link:../../impl
-
   example/service-consumer:
     dependencies:
-      example-icrc35-client-library:
+      example-icrc35-shared-library:
         specifier: workspace:*
-        version: link:../client
+        version: link:../shared
       icrc-35:
         specifier: workspace:*
         version: link:../../impl
@@ -33,9 +27,9 @@ importers:
 
   example/service-provider:
     dependencies:
-      example-icrc35-client-library:
+      example-icrc35-shared-library:
         specifier: workspace:*
-        version: link:../client
+        version: link:../shared
       icrc-35:
         specifier: workspace:*
         version: link:../../impl
@@ -43,6 +37,12 @@ importers:
       vite:
         specifier: 5.0.8
         version: 5.0.8
+
+  example/shared:
+    dependencies:
+      icrc-35:
+        specifier: workspace:*
+        version: link:../../impl
 
   impl:
     dependencies:

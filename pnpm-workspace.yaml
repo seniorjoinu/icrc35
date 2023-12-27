@@ -1,5 +1,5 @@
 packages:
   - "impl"
-  - "example/client"
+  - "example/shared"
   - "example/service-provider"
   - "example/service-consumer"

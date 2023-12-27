@@ -1,9 +1,8 @@
-import { ExampleServer, ISharedRequest, ISharedResponse } from "example-icrc35-client-library";
+import { GREET_ROUTE, ISharedRequest, ISharedResponse } from "example-icrc35-shared-library";
 import { ICRC35Connection } from "icrc-35";
-import { generateDefaultFilter } from "icrc-35/dist/esm/utils";
 
-if (window.location.pathname !== "/icrc35") {
-  alert("Wrong ICRC-35 path: go to /icrc35");
+if (window.location.pathname !== "/icrc-35") {
+  alert("Wrong ICRC-35 path: go to /icrc-35");
 }
 
 if (!window.opener) {
@@ -14,26 +13,28 @@ window.addEventListener("load", async () => {
   // establish ICRC-35 connection
   const connection = await ICRC35Connection.establish({
     mode: "child",
-    connectionFilter: generateDefaultFilter(),
+    connectionFilter: {
+      kind: "blacklist",
+      list: [],
+    },
     peer: window.opener,
     debug: true,
   });
-  const server = new ExampleServer(connection);
 
   // wait for a request from peer
-  let greetRequest = await server.nextGreetRequest();
+  connection.onRequest(GREET_ROUTE, (request) => {
+    // validate inputs
+    const body = request.payload as ISharedRequest;
+    if (typeof body !== "object" || !body.name || typeof body.name !== "string") {
+      throw new Error("Invalid request");
+    }
 
-  // validate inputs
-  const body = greetRequest.payload as ISharedRequest;
-  if (typeof body !== "object" || !body.name || typeof body.name !== "string") {
-    throw new Error("Invalid request");
-  }
+    // calculate output and respond
+    const greeting: ISharedResponse = { result: `Hello, ${body.name}` };
+    request.respond(greeting);
 
-  // calculate output and respond
-  const greeting: ISharedResponse = { result: `Hello, ${body.name}` };
-  greetRequest.respond(greeting);
-
-  // close the connection and the window
-  connection.close();
-  window.close();
+    // close the connection and the window
+    connection.close();
+    window.close();
+  });
 });

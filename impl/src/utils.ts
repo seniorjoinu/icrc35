@@ -91,7 +91,7 @@ export function openICRC35Window(origin: string | URL): { peer: Window; peerOrig
   // force it to be an origin
   origin = origin.origin;
 
-  const w = window.open(new URL("/icrc35", origin), "_blank");
+  const w = window.open(new URL("/icrc-35", origin), "_blank");
 
   if (w === null) {
     throw new ICRC35Error(ErrorCode.UNSUPPORTED_FEATURE, "Unable to open a new browser window");

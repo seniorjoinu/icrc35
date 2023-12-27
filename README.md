@@ -9,7 +9,6 @@ This is a reference implementation of [ICRC-35 standard](https://github.com/dfin
 * `beforeConnectionClosed`/`afterConnectionClosed` lifecycle hooks;
 * [Transferable objects](https://developer.mozilla.org/en-US/docs/Web/API/Web_Workers_API/Transferable_objects) API, for faster transmission;
 * automatic peer filtering for service providers;
-* request queue;
 * debug mode, when messages are printed to the console.
 
 [`example` directory](./example/) contains an example project that highlights some best practices and allows to see how the protocol works in real time locally.
@@ -25,7 +24,7 @@ One window is a parent, because it opens another window to talk to. So another w
 
 "dependencies": {
     ...
-    "icrc35": "^0.2.1"
+    "icrc35": "^0.2"
     ...
 }
 ```
@@ -60,13 +59,14 @@ const connection = await ICRC35Connection.establish({
     peer: window.opener,
 });
 
+
 // listen for messages of a specific Route
-const request = await connection.nextRequest(["example:method"]);
+connection.onRequest("example:method", (request) => {
+    console.log(request.payload); // "World"
 
-console.log(request); // "World"
-
-// respond
-request.respond(`Hello, ${request.payload}!`);
+    // respond
+    request.respond(`Hello, ${request.payload}!`);
+});
 ```
 
 See the [example project](./example/) for a more in-depth example.
