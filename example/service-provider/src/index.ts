@@ -1,4 +1,4 @@
-import { ExampleClient, ISharedRequest, ISharedResponse } from "example-icrc35-client-library";
+import { ExampleServer, ISharedRequest, ISharedResponse } from "example-icrc35-client-library";
 import { ICRC35Connection } from "icrc-35";
 import { generateDefaultFilter } from "icrc-35/dist/esm/utils";
 
@@ -18,10 +18,10 @@ window.addEventListener("load", async () => {
     peer: window.opener,
     debug: true,
   });
-  const client = new ExampleClient(connection);
+  const server = new ExampleServer(connection);
 
   // wait for a request from peer
-  let greetRequest = await client.nextGreetRequest();
+  let greetRequest = await server.nextGreetRequest();
 
   // validate inputs
   const body = greetRequest.payload as ISharedRequest;

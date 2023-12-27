@@ -18,6 +18,10 @@ export class ExampleClient {
 
     throw new Error("Invalid response");
   }
+}
+
+export class ExampleServer {
+  constructor(private connection: IICRC35Connection) {}
 
   async nextGreetRequest(): Promise<ICRC35AsyncRequest<ISharedRequest>> {
     return this.connection.nextRequest([ExampleClient.GreetRoute]);
