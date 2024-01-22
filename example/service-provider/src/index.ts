@@ -1,4 +1,4 @@
-import { GREET_ROUTE, ISharedRequest, ISharedResponse } from "example-icrc35-shared-library";
+import { ExampleServer } from "example-icrc35-shared-library";
 import { ICRC35Connection } from "icrc-35";
 
 if (window.location.pathname !== "/icrc-35") {
@@ -21,20 +21,7 @@ window.addEventListener("load", async () => {
     debug: true,
   });
 
-  // wait for a request from peer
-  connection.onRequest(GREET_ROUTE, (request) => {
-    // validate inputs
-    const body = request.payload as ISharedRequest;
-    if (typeof body !== "object" || !body.name || typeof body.name !== "string") {
-      throw new Error("Invalid request");
-    }
+  const server = new ExampleServer(connection);
 
-    // calculate output and respond
-    const greeting: ISharedResponse = { result: `Hello, ${body.name}` };
-    request.respond(greeting);
-
-    // close the connection and the window
-    connection.close();
-    window.close();
-  });
+  server.onGreet((name) => `Hello, ${name}`);
 });

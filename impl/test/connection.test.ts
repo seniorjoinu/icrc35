@@ -148,8 +148,10 @@ describe("common connection", () => {
 
     let blacklistWorks = false;
 
+    let connAP, connA, connB;
+
     try {
-      const connectionAP = ICRC35Connection.establish({
+      connAP = ICRC35Connection.establish({
         peer: pipeBA,
         peerOrigin: originB,
         listener: pipeAB,
@@ -157,7 +159,7 @@ describe("common connection", () => {
         debug: true,
       });
 
-      const connectionB = await ICRC35Connection.establish({
+      connB = await ICRC35Connection.establish({
         peer: pipeAB,
         listener: pipeBA,
         mode: "child",
@@ -168,13 +170,17 @@ describe("common connection", () => {
         debug: true,
       });
 
-      const connectionA = await connectionAP;
+      connA = await connAP;
+      connA?.close();
     } catch (e) {
       if (e instanceof ICRC35Error) {
         if (e.code === ErrorCode.UNEXPECTED_PEER) {
           blacklistWorks = true;
         }
       }
+
+      connA = await connAP;
+      connA?.close();
     }
 
     expect(blacklistWorks).toBe(true);
@@ -182,7 +188,7 @@ describe("common connection", () => {
     let whitelistWorks = false;
 
     try {
-      const connectionAP = ICRC35Connection.establish({
+      connAP = ICRC35Connection.establish({
         peer: pipeBA,
         peerOrigin: originB,
         listener: pipeAB,
@@ -190,7 +196,7 @@ describe("common connection", () => {
         debug: true,
       });
 
-      const connectionB = await ICRC35Connection.establish({
+      connB = await ICRC35Connection.establish({
         peer: pipeAB,
         listener: pipeBA,
         mode: "child",
@@ -201,13 +207,17 @@ describe("common connection", () => {
         debug: true,
       });
 
-      const connectionA = await connectionAP;
+      connA = await connAP;
+      connA?.close();
     } catch (e) {
       if (e instanceof ICRC35Error) {
         if (e.code === ErrorCode.UNEXPECTED_PEER) {
           whitelistWorks = true;
         }
       }
+
+      connA = await connAP;
+      connA?.close();
     }
 
     expect(whitelistWorks).toBe(true);
@@ -218,21 +228,19 @@ describe("async connection", () => {
   it("should be able to receive a request and respond", async () => {
     const [connectionA, connectionB] = await make();
 
-    const responsePromise = connectionA.request("test:123", { a: 1, b: "2" });
+    connectionB.onRequest<{ a: number; b: string }>("test:123", (request) => {
+      expect(request).toBeDefined();
+      expect(request).toBeInstanceOf(ICRC35AsyncRequest);
+      expect(request!.route).toBe("test:123");
+      expect(request!.payload).toBeDefined();
+      expect(typeof request!.payload).toBe("object");
+      expect(request!.payload.a).toBe(1);
+      expect(request!.payload.b).toBe("2");
 
-    let request: any = await connectionB.nextRequest();
+      request!.respond(true);
+    });
 
-    expect(request).toBeDefined();
-    expect(request).toBeInstanceOf(ICRC35AsyncRequest);
-    expect(request!.route).toBe("test:123");
-    expect(request!.payload).toBeDefined();
-    expect(typeof request!.payload).toBe("object");
-    expect((request!.payload as { a: number }).a).toBe(1);
-    expect((request!.payload as { b: string }).b).toBe("2");
-
-    request!.respond(true);
-
-    const response = (await responsePromise) as boolean;
+    const response: boolean = await connectionA.request("test:123", { a: 1, b: "2" });
 
     expect(typeof response).toBe("boolean");
     expect(response).toBe(true);
@@ -291,17 +299,17 @@ describe("async connection", () => {
   it("should allow multiple concurrent requests to be processed in the same order", async () => {
     const [connectionA, connectionB] = await make();
 
+    let a = 1;
+
+    connectionB.onRequest<{ a: number }>("test:abc:def", (request) => {
+      expect(request.payload.a).toBe(a);
+      a++;
+
+      request.respond(undefined);
+    });
+
     const responsePromise1 = connectionA.request("test:abc:def", { a: 1 });
     const responsePromise2 = connectionA.request("test:abc:def", { a: 2 });
-
-    const request1 = await connectionB.nextRequest(["test:abc:def"]);
-    const request2 = await connectionB.nextRequest(["test:abc:def"]);
-
-    expect((request1.payload as { a: number }).a).toBe(1);
-    expect((request2.payload as { a: number }).a).toBe(2);
-
-    request1.respond(undefined);
-    request2.respond(undefined);
 
     await responsePromise1;
     await responsePromise2;

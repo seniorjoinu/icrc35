@@ -1,5 +1,4 @@
 import z from "zod";
-import { ICRC35_SECRET_SIZE } from "./consts";
 
 // ------------ PROTOCOL TYPES START --------------
 
@@ -13,7 +12,6 @@ export const ZMsgKind = z.enum([
   "Request",
   "Response",
 ]);
-export const ZSecret = z.custom<Uint8Array>((val) => val instanceof Uint8Array && val.length == ICRC35_SECRET_SIZE);
 
 export const ZICRC35Base = z.object({
   domain: z.literal("icrc-35"),
@@ -21,11 +19,9 @@ export const ZICRC35Base = z.object({
 
 export const ZHandshakeInitMsg = ZICRC35Base.extend({
   kind: z.literal(ZMsgKind.Enum.HandshakeInit),
-  secret: ZSecret,
 }).strict();
 export const ZHandshakeCompleteMsg = ZICRC35Base.extend({
   kind: z.literal(ZMsgKind.Enum.HandshakeComplete),
-  secret: ZSecret,
 }).strict();
 
 export const ZPingMsg = ZICRC35Base.extend({
@@ -72,7 +68,6 @@ export const ZMsg = z.discriminatedUnion("kind", [
 ]);
 
 export type EMsgKind = z.infer<typeof ZMsgKind>;
-export type TSecret = z.infer<typeof ZSecret>;
 
 export type IHandshakeInitMsg = z.infer<typeof ZHandshakeInitMsg>;
 export type IHandshakeCompleteMsg = z.infer<typeof ZHandshakeCompleteMsg>;

@@ -20,6 +20,23 @@ export class ExampleClient {
   }
 }
 
+export class ExampleServer {
+  constructor(private connection: IICRC35Connection) {}
+
+  onGreet(handler: (name: string) => string) {
+    this.connection.onRequest<ISharedRequest>(GREET_ROUTE, (req) => {
+      if (typeof req.payload !== "object" || !req.payload.name || typeof req.payload.name !== "string") {
+        throw new Error("Invalid request");
+      }
+
+      req.respond<ISharedResponse>({ result: handler(req.payload.name) });
+
+      this.connection.close();
+      window.close();
+    });
+  }
+}
+
 export interface ISharedRequest {
   name: string;
 }

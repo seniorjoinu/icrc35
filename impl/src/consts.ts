@@ -1,9 +1,4 @@
 /**
- * The size of the secret sent by peers during the Handshake Phase
- */
-export const ICRC35_SECRET_SIZE = 32;
-
-/**
  * The connection timeout - how much time should pass without receiving any messages
  * from a remote peer, before the connection is considered CLOSED
  */

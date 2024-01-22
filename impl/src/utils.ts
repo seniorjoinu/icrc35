@@ -1,15 +1,4 @@
-import { ICRC35_SECRET_SIZE } from "./consts";
 import { IConnectionFilter, IListener } from "./types";
-
-/**
- * Generates a random byte array of size 32
- */
-export function generateSecret(): Uint8Array {
-  const res = new Uint8Array(ICRC35_SECRET_SIZE);
-  crypto.getRandomValues(res);
-
-  return res;
-}
 
 /**
  * the default is to deny all connections (empty whitelist)

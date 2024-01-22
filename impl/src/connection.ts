@@ -39,16 +39,7 @@ import {
   ICRC35AsyncRequest,
   RequestHandlerFn,
 } from "./types";
-import {
-  ErrorCode,
-  ICRC35Error,
-  generateDefaultFilter,
-  generateSecret,
-  isEqualUint8Arr,
-  defaultListener,
-  log,
-  delay,
-} from "./utils";
+import { ErrorCode, ICRC35Error, generateDefaultFilter, defaultListener, log } from "./utils";
 import { DEFAULT_DEBUG, ICRC35_CONNECTION_TIMEOUT_MS, ICRC35_PING_TIMEOUT_MS } from "./consts";
 
 /**
@@ -433,8 +424,6 @@ export class ICRC35Connection<P extends IPeer, L extends IListener> implements I
   }
 
   private childHandshake(resolve: ResolveFn, reject: RejectFn) {
-    const secret = generateSecret();
-
     if (this.debug) {
       log(this.listener.origin, "child-level handshake started...");
     }
@@ -451,22 +440,6 @@ export class ICRC35Connection<P extends IPeer, L extends IListener> implements I
         log(this.listener.origin, "received message", ev.data, "from", ev.origin);
       }
 
-      // pass events with other secrets (this would mean some other page is trying to get in)
-      if (!isEqualUint8Arr(secret, res.data.secret)) {
-        if (this.debug) {
-          log(this.listener.origin, "incorrect secret, ignoring...");
-        }
-
-        return;
-      }
-
-      if (!this.childExpectsPeer(ev.origin)) {
-        this.listener.removeEventListener("message", handler);
-        reject(new ICRC35Error(ErrorCode.UNEXPECTED_PEER, `Did not expect a connection from peer '${ev.origin}'`));
-
-        return;
-      }
-
       if (this.debug) {
         log(this.listener.origin, `child-level handshake complete, peer origin = ${ev.origin}`);
       }
@@ -474,6 +447,14 @@ export class ICRC35Connection<P extends IPeer, L extends IListener> implements I
       this.updateTimestamp();
       this._peerOrigin = ev.origin;
       this.listener.removeEventListener("message", handler);
+
+      if (!this.childExpectsPeer(ev.origin)) {
+        this.close();
+
+        reject(new ICRC35Error(ErrorCode.UNEXPECTED_PEER, `Did not expect a connection from peer '${ev.origin}'`));
+
+        return;
+      }
 
       resolve();
     };
@@ -483,7 +464,6 @@ export class ICRC35Connection<P extends IPeer, L extends IListener> implements I
     const msg: IHandshakeInitMsg = {
       domain: "icrc-35",
       kind: "HandshakeInit",
-      secret,
     };
 
     this._peer!.postMessage(msg, "*");
@@ -515,7 +495,6 @@ export class ICRC35Connection<P extends IPeer, L extends IListener> implements I
       const msg: IHandshakeCompleteMsg = {
         domain: "icrc-35",
         kind: "HandshakeComplete",
-        secret: res.data.secret,
       };
 
       this.send(msg);
